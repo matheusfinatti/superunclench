@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch window background = colorScheme.surface (no white flash). -->
+    <color name="window_background">#FFF9F9FF</color>
+    <color name="window_background_light">#FFF9F9FF</color>
+    <color name="window_background_dark">#FF111318</color>
+
+    <!-- Notification colors, resolved from the *system* night mode (design-system §2.4). -->
+    <color name="notif_good">#FF276C3E</color>
+    <color name="notif_bad">#FFB3261E</color>
+    <color name="notif_on_good">#FFFFFFFF</color>
+    <color name="notif_on_bad">#FFFFFFFF</color>
+    <color name="notif_accent">#FF3D5F90</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.SuperUnclench" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <!-- In-app Light/Dark on API 24–30 (MainActivity sets these before super.onCreate). -->
+    <style name="Theme.SuperUnclench.ForcedLight" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_light</item>
+    </style>
+
+    <style name="Theme.SuperUnclench.ForcedDark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_dark</item>
+    </style>
+</resources>

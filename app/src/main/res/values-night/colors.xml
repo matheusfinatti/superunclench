@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_background">#FF111318</color>
+
+    <color name="notif_good">#FF8DD89F</color>
+    <color name="notif_bad">#FFFFB4AB</color>
+    <color name="notif_on_good">#FF00391A</color>
+    <color name="notif_on_bad">#FF690005</color>
+    <color name="notif_accent">#FF3D5F90</color>
+</resources>

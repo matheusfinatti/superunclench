@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- US-03 Option B: collapsed custom content (title only; buttons don't fit reliably at ~48dp). -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notif_title"
+    style="@style/TextAppearance.Compat.Notification.Title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:text="@string/notif_title" />

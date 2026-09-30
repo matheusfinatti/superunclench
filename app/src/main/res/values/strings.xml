@@ -1,0 +1,202 @@
+<resources>
+    <string name="app_name">SuperUnclench</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_stats">Stats</string>
+    <string name="nav_settings">Settings</string>
+    <string name="cd_back">Back</string>
+
+    <!-- Home -->
+    <string name="home_greeting_default">Hi there</string>
+    <string name="home_greeting_named">Hi, %1$s</string>
+    <string name="home_subtitle_stopped">Ready when you are.</string>
+    <string name="home_subtitle_running">Check-ins are on. Keep it loose.</string>
+    <string name="home_subtitle_paused">Taking a break.</string>
+    <string name="home_subtitle_pending">Quick check: how\'s your jaw?</string>
+    <string name="disclaimer_body">SuperUnclench is an awareness tool, not medical advice. If you have jaw pain, talk to a dentist or doctor.</string>
+    <string name="disclaimer_action">Got it</string>
+    <string name="disclaimer_a11y">Note: %1$s</string>
+    <string name="level_overline">Level</string>
+    <string name="level_of_total">of %1$d</string>
+    <string name="level_progress">%1$d of %2$d to Level %3$d</string>
+    <string name="level_max">Level %1$d · Max level</string>
+    <string name="level_max_sub">Goods still count</string>
+    <string name="interval_line">Check-ins every %1$s</string>
+    <string-array name="level_names">
+        <item>Warm-up</item>
+        <item>Noticing</item>
+        <item>Aware</item>
+        <item>Steady</item>
+        <item>Relaxed</item>
+        <item>Grounded</item>
+        <item>Loose</item>
+        <item>Unclenched</item>
+    </string-array>
+    <!-- Level card accessibility label, e.g. "Level 3, Aware. 2 of 4 to Level 4. Check-ins every 15 minutes." -->
+    <string name="level_card_a11y">Level %1$d, %2$s. %3$s. Check-ins every %4$s.</string>
+    <string name="level_card_a11y_max">Max level. Goods still count</string>
+    <plurals name="interval_minutes_long">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="interval_hours_long">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+
+    <!-- Level feedback messages (US-04 §3) -->
+    <string name="msg_level_up_title">Level up!</string>
+    <string name="msg_level_up_body">Check-ins now every %1$s.</string>
+    <string name="msg_max_good">Still unclenched. Nice.</string>
+    <string name="msg_reset">Progress for this level reset. You\'re still at Level %1$d.</string>
+    <string name="msg_demote">Back to Level %1$d — check-ins every %2$s. You\'ve got this.</string>
+    <string name="msg_floor">Noticing is the first step. Check-ins stay every %1$s.</string>
+    <string name="status_running">Running</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="action_start">Start</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_resume">Resume</string>
+    <string name="next_overline">Next check-in</string>
+    <string name="next_in_prefix">in</string>
+    <string name="next_at">at %1$s</string>
+    <string name="next_a11y">Next check-in in %1$s, at %2$s</string>
+    <string name="pause_title">Pause check-ins for…</string>
+    <string name="pause_15">15 min</string>
+    <string name="pause_60">1 h</string>
+    <string name="pause_indef">Until I resume</string>
+    <string name="pause_cancel">Cancel</string>
+    <string name="paused_until_overline">Paused until</string>
+    <string name="paused_until_a11y">Paused until %1$s</string>
+    <string name="paused_auto_resume">Check-ins resume automatically.</string>
+    <string name="paused_indef_title">Paused until you resume</string>
+    <string name="paused_level_kept">Your level is kept.</string>
+    <string name="snackbar_paused_until">Paused until %1$s</string>
+    <string name="snackbar_paused_indef">Paused until you resume</string>
+    <string name="snackbar_resumed">Check-ins resumed</string>
+    <string name="autopause_title">Paused — you missed 3 check-ins. Resume?</string>
+    <string name="autopause_body">No worries — we stopped so we won\'t nag you while you\'re away.</string>
+    <string name="pending_missed_hint">Missed the last one — that\'s fine.</string>
+    <plurals name="duration_seconds_long">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+    <string name="session_stopped_helper">You\'ll get a quick check-in every %1$s. Answer with one tap.</string>
+    <string name="snackbar_stopped">Check-ins stopped. Your level is saved.</string>
+
+    <!-- Intervals -->
+    <string name="interval_minutes">%1$d min</string>
+    <string name="interval_hours">%1$d h</string>
+    <string name="interval_hours_minutes">%1$d h %2$d min</string>
+
+    <!-- Notification permission (US-03) -->
+    <string name="rationale_title">Check-ins arrive as notifications</string>
+    <string name="rationale_body">SuperUnclench sends a short check-in now and then. Allow notifications so they can reach you — no spam, and you can pause any time.</string>
+    <string name="rationale_body_blocked">Notifications are turned off for SuperUnclench. Turn them on in Settings so check-ins can reach you.</string>
+    <string name="rationale_continue">Continue</string>
+    <string name="rationale_open_settings">Open settings</string>
+    <string name="rationale_not_now">Not now</string>
+    <string name="banner_notif_off">Notifications are off — check-ins can\'t reach you.</string>
+    <string name="banner_open_settings">Open settings</string>
+    <string name="banner_exact_title">Check-ins may be a few minutes late</string>
+    <string name="banner_exact_body">Allow exact timing so they arrive right on schedule.</string>
+    <string name="banner_exact_action">Allow exact timing</string>
+    <string name="banner_not_now">Not now</string>
+    <string name="countdown_notif_off_caption">Check-ins can\'t be shown until notifications are on.</string>
+    <string name="interval_short_suffix">(short: %1$d s)</string>
+
+    <!-- Pending check-in card -->
+    <string name="pending_overline">Check-in · %1$s</string>
+    <string name="pending_title">Were you clenching just now?</string>
+    <string name="pending_body">Notice your jaw, then tap one.</string>
+    <string name="pending_a11y_announcement">Check-in: were you clenching just now?</string>
+    <string name="answer_good">Good</string>
+    <string name="answer_bad">Bad</string>
+    <string name="answer_good_caption">I was relaxed</string>
+    <string name="answer_bad_caption">I was clenching</string>
+    <string name="answer_good_a11y">Good, I was relaxed</string>
+    <string name="answer_bad_a11y">Bad, I was clenching</string>
+    <string name="answered_good">Nice — noted.</string>
+    <string name="answered_bad">Noted. Unclench and breathe out.</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_name">Check-ins</string>
+    <string name="notif_channel_desc">Short check-ins asking if your jaw is relaxed.</string>
+    <string name="notif_title">Check-in: jaw relaxed?</string>
+    <string name="notif_body_short">Were you clenching just now?</string>
+    <string name="notif_text">Were you clenching just now? Tap Good or Bad.</string>
+
+    <!-- Stats -->
+    <string name="stats_title">Stats</string>
+    <string name="stats_empty_title">No check-ins yet</string>
+    <string name="stats_empty_body">Tap Start on Home to begin.</string>
+    <string name="empty_action">Go to Home</string>
+    <string name="empty_a11y">No check-ins yet — tap Start on Home to begin.</string>
+    <string name="frame_today">Today</string>
+    <string name="frame_7d">7 days</string>
+    <string name="frame_30d">30 days</string>
+    <string name="tile_good">Good</string>
+    <string name="tile_bad">Bad</string>
+    <string name="tile_missed">Missed</string>
+    <string name="tile_rate">Good rate</string>
+    <string name="tile_rate_empty">—</string>
+    <string name="tile_rate_a11y">Good rate: %1$d percent</string>
+    <string name="tile_rate_a11y_empty">Good rate: none yet</string>
+    <string name="tile_streak">Streak</string>
+    <plurals name="streak_value">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <string name="streak_support">Days in a row with a Good rate of 50%+</string>
+    <string name="chart_title_hourly">Check-ins per hour</string>
+    <string name="chart_title_daily">Check-ins per day</string>
+    <string name="legend_good">Good</string>
+    <string name="legend_bad">Bad</string>
+    <string name="chart_today_label">Today</string>
+    <string name="chart_empty_period">No check-ins in this period</string>
+    <string name="readout_hint">Tap a bar to see details</string>
+    <string name="readout_value">%1$s · %2$d Good · %3$d Bad · %4$d Missed</string>
+    <string name="tooltip_counts">%1$d Good · %2$d Bad</string>
+    <string name="readout_prev_cd">Previous bar</string>
+    <string name="readout_next_cd">Next bar</string>
+    <string name="chart_bar_a11y">%1$s: %2$d Good, %3$d Bad, %4$d Missed</string>
+    <string name="chart_frame_7d_a11y">last 7 days</string>
+    <string name="chart_frame_30d_a11y">last 30 days</string>
+    <string name="chart_summary_a11y">%1$s, %2$s. %3$d Good, %4$d Bad.</string>
+    <string name="chart_summary_highest_a11y">Highest: %1$s with %2$d Good and %3$d Bad.</string>
+    <string name="history_title">Recent check-ins</string>
+    <string name="history_level">Level %1$d · %2$s</string>
+    <string name="history_yesterday">Yesterday %1$s</string>
+    <string name="history_missed">Missed</string>
+    <string name="home_today_overline">Today</string>
+    <string name="home_today_a11y">Today: %1$d Good, %2$d Bad, %3$d Missed. Open stats.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_about">About &amp; disclaimer</string>
+    <string name="settings_group_profile">Profile</string>
+    <string name="settings_name_label">Your name</string>
+    <string name="settings_name_support">Shown in your greeting on Home.</string>
+    <string name="settings_name_clear_cd">Clear name</string>
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+    <string name="settings_group_progress">Progress</string>
+    <string name="settings_reset">Reset progress</string>
+    <string name="settings_reset_support">Go back to Level 1. History is kept.</string>
+    <string name="reset_dialog_title">Reset your progress?</string>
+    <string name="reset_dialog_body">You\'ll go back to Level 1 (0 of 3). Your check-in history stays.</string>
+    <string name="reset_dialog_confirm">Reset</string>
+    <string name="reset_dialog_cancel">Cancel</string>
+    <string name="snackbar_reset">Progress reset to Level 1</string>
+    <string name="settings_group_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="about_title">About</string>
+    <string name="about_version">Version %1$s (%2$d)</string>
+    <string name="about_how_title">How it works</string>
+    <string name="about_how_body">SuperUnclench checks in now and then to ask if your jaw is relaxed. Answer Good or Bad. The more often you\'re relaxed, the less often it asks.</string>
+</resources>
