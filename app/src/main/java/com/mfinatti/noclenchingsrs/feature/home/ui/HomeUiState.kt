@@ -1,9 +1,12 @@
 package com.mfinatti.noclenchingsrs.feature.home.ui
 
 import com.mfinatti.noclenchingsrs.data.debug.DebugOverrides
+import com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource
 import com.mfinatti.noclenchingsrs.domain.session.LastAnswer
 import com.mfinatti.noclenchingsrs.domain.session.SessionState
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
+import com.mfinatti.noclenchingsrs.domain.settings.AlertStyle
+import com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule
 import com.mfinatti.noclenchingsrs.domain.settings.UserSettings
 import com.mfinatti.noclenchingsrs.domain.srs.Answer
 import com.mfinatti.noclenchingsrs.domain.srs.LevelChange
@@ -31,6 +34,8 @@ data class HomeUiState(
     val autoPaused: Boolean = false,
     val consecutiveMisses: Int = 0,
     /** Home "Today" tiles (US-08 §8). */
+    /** Quiet hours rule from Settings (+ debug simulation), evaluated against the clock in the UI. */
+    val quiet: QuietHoursRule = QuietHoursRule.Off,
     val todayGood: Int = 0,
     val todayBad: Int = 0,
     val todayMissed: Int = 0,
@@ -40,7 +45,17 @@ data class HomeUiState(
     val notificationPermissionRequested: Boolean = false,
     val previewNotificationsOff: Boolean = false,
     val previewLegacyNotificationPermission: Boolean = false,
+    /** US-11: the pending check-in is ringing (sound + vibration). */
+    val ringing: Boolean = false,
+    /** US-11: the pending Ring check-in was silenced and still waits for an answer. */
+    val ringSilenced: Boolean = false,
+    val alertStyle: AlertStyle = AlertStyle.NUDGE,
+    val previewFullScreenDenied: Boolean = false,
 ) {
+    /** US-11 §5: "Ring can't show full screen" while Ring is selected and the permission is missing. */
+    fun showFullScreenBanner(canUseFullScreen: Boolean): Boolean =
+        alertStyle == AlertStyle.RING && (previewFullScreenDenied || !canUseFullScreen)
+
     /**
      * Whether to show the "Notifications are off" banner, given whether check-ins can actually be
      * delivered right now. On Android 13+ it stays hidden until the user has been asked once (the
@@ -89,6 +104,7 @@ data class HomeUiState(
                 },
                 previewExactAlarmsDenied = overrides.previewExactAlarmsDenied,
                 exactTimingBannerDismissed = session.exactTimingBannerDismissed,
+                quiet = QuietHoursRule.from(settings, simulate = overrides.simulateQuietHours),
                 pendingCheckInAtMillis = session.pendingCheckInAtMillis,
                 nextAlarmAtMillis = session.nextAlarmAtMillis,
                 autoPaused = session.autoPaused,
@@ -97,6 +113,10 @@ data class HomeUiState(
                 notificationPermissionRequested = settings.notificationPermissionRequested,
                 previewNotificationsOff = overrides.previewNotificationsOff,
                 previewLegacyNotificationPermission = overrides.previewLegacyNotificationPermission,
+                ringing = session.ringing,
+                ringSilenced = session.ringActive && session.ringSilenced,
+                alertStyle = settings.alertStyle,
+                previewFullScreenDenied = overrides.previewFullScreenDenied,
             )
         }
     }
@@ -118,7 +138,12 @@ enum class LevelMessage {
             LevelChange.PROMOTED -> LEVEL_UP
             LevelChange.SUB_LEVEL_RESET -> PROGRESS_RESET
             LevelChange.DEMOTED -> LEVEL_DOWN
-            LevelChange.UNCHANGED -> if (lastAnswer.answer == Answer.GOOD) MAX_GOOD else FLOOR
+            // A Good at L8 from the pending card already got "Nice — noted." there (US-06 sign-off).
+            LevelChange.UNCHANGED -> when {
+                lastAnswer.answer != Answer.GOOD -> FLOOR
+                lastAnswer.source == CheckInSource.CARD -> null
+                else -> MAX_GOOD
+            }
         }
     }
 }

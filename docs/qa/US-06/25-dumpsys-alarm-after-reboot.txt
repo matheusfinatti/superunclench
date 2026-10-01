@@ -1,0 +1,7 @@
+      operation=PendingIntent{638c1d9: PendingIntentRecord{810d79e com.google.android.gms/com.google.android.gms.core startService}}
+    RTC_WAKEUP #10: Alarm{312227f type 0 origWhen 1790844421272 whenElapsed 95866 com.mfinatti.noclenchingsrs}
+      tag=*walarm*:com.mfinatti.noclenchingsrs.action.FIRE_CHECK_IN
+      type=RTC_WAKEUP origWhen=2026-10-01 09:47:01.272 window=0 exactAllowReason=permission repeatInterval=0 count=0 flags=0x5
+      policyWhenElapsed: requester=+1m3s211ms app_standby=-22s183ms device_idle=-- battery_saver=-22s183ms
+      whenElapsed=+1m3s211ms maxWhenElapsed=+1m3s211ms
+      operation=PendingIntent{275924c: PendingIntentRecord{16aa295 com.mfinatti.noclenchingsrs broadcastIntent}}

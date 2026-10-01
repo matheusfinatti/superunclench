@@ -9,6 +9,14 @@
     <!-- Exact check-in timing (US-05). Not an alarm-clock app, so SCHEDULE_EXACT_ALARM (user-granted
          on API 33+) rather than USE_EXACT_ALARM. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- US-11 Ring: the alarm screen over the lock screen (Android 14+: user-revocable, checked at
+         runtime with canUseFullScreenIntent(); fallback = ringing heads-up). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- US-11 Ring: the ringing check-in plays from a foreground service (see RingService for the
+         type choice: systemExempted with exact alarms, else mediaPlayback). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Re-arm the check-in alarm after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -35,6 +43,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- US-11 alarm screen: own task, not in recents, shown over the lock screen (set in code). -->
+        <activity
+            android:name=".feature.checkin.ring.AlarmActivity"
+            android:configChanges="uiMode|orientation|screenSize|screenLayout|keyboardHidden"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showOnLockScreen="true"
+            android:taskAffinity="com.mfinatti.noclenchingsrs.alarm"
+            android:theme="@style/Theme.SuperUnclench" />
+
+        <service
+            android:name=".feature.checkin.ring.RingService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted|mediaPlayback" />
 
         <receiver
             android:name=".feature.checkin.alarm.CheckInAlarmReceiver"

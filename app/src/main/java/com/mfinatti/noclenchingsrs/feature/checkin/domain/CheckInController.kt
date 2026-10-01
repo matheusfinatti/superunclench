@@ -5,6 +5,7 @@ import com.mfinatti.noclenchingsrs.data.checkin.CheckInLogRepository
 import com.mfinatti.noclenchingsrs.data.session.SessionRepository
 import com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource
 import com.mfinatti.noclenchingsrs.domain.session.SessionEngine
+import com.mfinatti.noclenchingsrs.domain.settings.AlertStyle
 import com.mfinatti.noclenchingsrs.domain.session.SessionState
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
 import com.mfinatti.noclenchingsrs.domain.session.SessionTransition
@@ -23,6 +24,12 @@ sealed interface FireResult {
 
     /** The previous check-in was the 3rd consecutive miss: the session auto-paused, nothing posted. */
     data object AutoPaused : FireResult
+
+    /** Quiet hours are active: nothing posted, nothing missed; next alarm moved to [untilMillis]. */
+    data class QuietDeferred(val untilMillis: Long) : FireResult
+
+    /** US-11: a Ring check-in hit its auto-silence cap unanswered and was recorded as Missed. */
+    data class RingTimedOut(val autoPaused: Boolean) : FireResult
 
     /** The alarm marked the end of a timed pause: the session is running again. */
     data object PauseEnded : FireResult
@@ -71,7 +78,8 @@ class CheckInController(
     /** Start (or restart) a session: first alarm at the current level's interval. */
     suspend fun start(): SessionState = mutex.withLock {
         val p = policy()
-        val state = sessionRepository.update { sessionEngine.start(it, clock.nowMillis(), p.scale) }
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { sessionEngine.start(it, now, p.scale).quiet(p, now) }
         notifier.cancel()
         applyAlarm(state, p)
         state
@@ -86,7 +94,13 @@ class CheckInController(
         val p = policy()
         val now = clock.nowMillis()
         val until = duration?.let { now + p.scale.scale(it).inWholeMilliseconds }
-        val state = sessionRepository.update { sessionEngine.pause(it, until) }
+        var wasRing = false
+        val state = sessionRepository.update { current ->
+            wasRing = current.ringActive
+            sessionEngine.pause(current, until)
+        }
+        // US-11 AC8: pausing ends a ring (nothing recorded); a Nudge check-in stays answerable.
+        if (wasRing) notifier.cancel()
         applyAlarm(state, p)
         state
     }
@@ -94,7 +108,8 @@ class CheckInController(
     /** Resume a paused session: next alarm = now + current interval. */
     suspend fun resume(): SessionState = mutex.withLock {
         val p = policy()
-        val state = sessionRepository.update { sessionEngine.resume(it, clock.nowMillis(), p.scale) }
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { sessionEngine.resume(it, now, p.scale).quiet(p, now) }
         applyAlarm(state, p)
         state
     }
@@ -119,7 +134,7 @@ class CheckInController(
         val state = sessionRepository.update { current ->
             when {
                 current.status == SessionStatus.PAUSED -> {
-                    val resumed = sessionEngine.onPauseEnded(current, now, p.scale)
+                    val resumed = sessionEngine.onPauseEnded(current, now, p.scale).quiet(p, now)
                     outcome = if (resumed.status == SessionStatus.RUNNING) FireResult.PauseEnded else FireResult.NotRunning
                     resumed
                 }
@@ -127,25 +142,64 @@ class CheckInController(
                     outcome = FireResult.NotRunning
                     current
                 }
+                current.ringActive -> {
+                    // US-11: while a Ring check-in is unresolved the only alarm is its cap. A
+                    // forced fire (QA) never replaces a ring either.
+                    val cap = current.ringCapAtMillis ?: now
+                    if (now + SessionEngine.ALARM_EARLY_TOLERANCE_MILLIS >= cap) {
+                        val t = sessionEngine.onMissed(current, now, p.scale, CheckInSource.TIMEOUT, p.autoPause)
+                        transition = t
+                        outcome = FireResult.RingTimedOut(autoPaused = t.state.status == SessionStatus.PAUSED)
+                        t.state.quiet(p, now)
+                    } else {
+                        outcome = FireResult.Stale
+                        current
+                    }
+                }
                 !force && sessionEngine.isStaleAlarm(current, now) -> {
                     outcome = FireResult.Stale
                     current
                 }
+                p.quiet.isActive(now) -> {
+                    // Quiet hours (US-10): no notification, no Missed; defer to the end of the window.
+                    val until = p.quiet.adjust(now, now)
+                    outcome = FireResult.QuietDeferred(until)
+                    current.copy(nextAlarmAtMillis = until)
+                }
                 else -> {
-                    val t = sessionEngine.onAlarmFired(current, now, p.scale, p.autoPause)
+                    val cap = if (p.alertStyle == AlertStyle.RING) p.ringCap.inWholeMilliseconds else null
+                    val t = sessionEngine.onAlarmFired(current, now, p.scale, p.autoPause, ringCapMillis = cap)
                     transition = t
-                    t.state
+                    t.state.quiet(p, now)
                 }
             }
         }
         outcome?.let { result ->
-            if (result == FireResult.PauseEnded || result == FireResult.Stale) applyAlarm(state, p)
+            if (result is FireResult.RingTimedOut) {
+                transition?.event?.let { checkInLog.append(it) }
+                notifier.cancel()
+                applyAlarm(state, p)
+                return@withLock result
+            }
+            if (result == FireResult.PauseEnded || result == FireResult.Stale || result is FireResult.QuietDeferred) {
+                applyAlarm(state, p)
+            }
             return@withLock result
         }
         val missedEvent = transition?.event
         if (missedEvent != null) checkInLog.append(missedEvent)
         val pendingAt = state.pendingCheckInAtMillis
-        if (state.status == SessionStatus.RUNNING && pendingAt != null) {
+        val ringCap = state.ringCapAtMillis
+        if (state.status == SessionStatus.RUNNING && pendingAt != null && ringCap != null) {
+            notifier.showRing(
+                checkInAtMillis = pendingAt,
+                level = state.srs.level,
+                capAtMillis = ringCap,
+                fullScreen = p.fullScreenAllowed,
+            )
+            applyAlarm(state, p)
+            FireResult.Fired(previousMissed = missedEvent != null)
+        } else if (state.status == SessionStatus.RUNNING && pendingAt != null) {
             notifier.show(
                 checkInAtMillis = pendingAt,
                 level = state.srs.level,
@@ -176,9 +230,10 @@ class CheckInController(
             if (checkInAtMillis != null && current.pendingCheckInAtMillis != checkInAtMillis) {
                 current
             } else {
-                val t = sessionEngine.onAnswer(current, answer, clock.nowMillis(), p.scale, source)
+                val now = clock.nowMillis()
+                val t = sessionEngine.onAnswer(current, answer, now, p.scale, source)
                 transition = t
-                t.state
+                t.state.quiet(p, now)
             }
         }
         val applied = transition ?: return@withLock AnswerResult.Stale
@@ -203,9 +258,10 @@ class CheckInController(
             if (pending == null || (checkInAtMillis != null && checkInAtMillis != pending)) {
                 current
             } else {
-                val t = sessionEngine.onMissed(current, clock.nowMillis(), p.scale, source, p.autoPause)
+                val now = clock.nowMillis()
+                val t = sessionEngine.onMissed(current, now, p.scale, source, p.autoPause)
                 transition = t
-                t.state
+                t.state.quiet(p, now)
             }
         }
         val missed = transition ?: return@withLock MissResult.NoPending
@@ -222,15 +278,83 @@ class CheckInController(
      */
     suspend fun restoreSchedule(): SessionState = mutex.withLock {
         val p = policy()
-        val state = sessionRepository.update { sessionEngine.restoreAfterBoot(it, clock.nowMillis(), p.scale) }
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { sessionEngine.restoreAfterBoot(it, now, p.scale).quiet(p, now) }
         applyAlarm(state, p)
+        // US-11: a ring outlives process death (update, crash, low-memory kill): ring again until
+        // answered or capped. A cap that already passed has just been re-armed in the past and
+        // fires (timeout) straight away.
+        val pendingAt = state.pendingCheckInAtMillis
+        val cap = state.ringCapAtMillis
+        if (state.ringing && pendingAt != null && cap != null && cap > now) {
+            notifier.showRing(pendingAt, state.srs.level, cap, p.fullScreenAllowed)
+        }
         state
+    }
+
+    /**
+     * US-11 Silence (alarm screen button, notification, in-app card, volume/power key): sound and
+     * vibration stop, the check-in stays pending until answered or capped. Returns false when
+     * nothing was ringing.
+     */
+    suspend fun silenceRing(): Boolean = mutex.withLock {
+        var silenced = false
+        sessionRepository.update { current ->
+            silenced = current.ringing
+            sessionEngine.silenceRing(current)
+        }
+        if (silenced) notifier.silenceRing()
+        silenced
     }
 
     /** Re-times the next alarm from now (debug Short intervals toggle). */
     suspend fun rescheduleFromNow(): SessionState = mutex.withLock {
         val p = policy()
-        val state = sessionRepository.update { sessionEngine.rescheduleFromNow(it, clock.nowMillis(), p.scale) }
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { sessionEngine.rescheduleFromNow(it, now, p.scale).quiet(p, now) }
+        applyAlarm(state, p)
+        state
+    }
+
+    /**
+     * Quiet-hours settings changed (switch or range; US-10 AC7). Runs [change] (the save) under the
+     * lock, then re-evaluates a running session against the new rule:
+     * - an alarm that had been deferred to the old window's end, now outside quiet hours, becomes
+     *   now + current interval (as on Resume);
+     * - otherwise the scheduled time is kept, unless the new window covers it (then → new end).
+     */
+    suspend fun quietHoursChanged(change: suspend () -> Unit): SessionState = mutex.withLock {
+        val before = policy().quiet
+        change()
+        val p = policy()
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { current ->
+            val next = current.nextAlarmAtMillis
+            if (current.status != SessionStatus.RUNNING || next == null || current.ringActive) {
+                current
+            } else if (before.isDeferredAlarm(next, now) && !p.quiet.isActive(now)) {
+                sessionEngine.rescheduleFromNow(current, now, p.scale).quiet(p, now)
+            } else if (before.isDeferredAlarm(next, now)) {
+                // Still quiet now: the check-in waits for the (possibly new) end time.
+                current.copy(nextAlarmAtMillis = p.quiet.adjust(now, now))
+            } else {
+                current.quiet(p, now)
+            }
+        }
+        applyAlarm(state, p)
+        state
+    }
+
+    /**
+     * Quiet hours ended early (debug "Simulate quiet hours now: OFF"): like reaching the end time,
+     * the next check-in is due right away. Level unchanged.
+     */
+    suspend fun quietHoursEnded(): SessionState = mutex.withLock {
+        val p = policy()
+        val now = clock.nowMillis()
+        val state = sessionRepository.update { current ->
+            if (current.status == SessionStatus.RUNNING) current.copy(nextAlarmAtMillis = now) else current
+        }
         applyAlarm(state, p)
         state
     }
@@ -246,8 +370,9 @@ class CheckInController(
      */
     suspend fun resetProgress(): SessionState = mutex.withLock {
         val p = policy()
+        val now = clock.nowMillis()
         val state = sessionRepository.update { current ->
-            sessionEngine.rescheduleFromNow(sessionEngine.resetProgress(current), clock.nowMillis(), p.scale)
+            sessionEngine.rescheduleFromNow(sessionEngine.resetProgress(current), now, p.scale).quiet(p, now)
         }
         applyAlarm(state, p)
         state
@@ -269,13 +394,28 @@ class CheckInController(
         notifier.cancel()
     }
 
+    /** Defers a running session's next alarm out of quiet hours (US-10); clock times aren't scaled. */
+    private fun SessionState.quiet(policy: SchedulingPolicy, nowMillis: Long): SessionState {
+        val next = nextAlarmAtMillis ?: return this
+        if (status != SessionStatus.RUNNING) return this
+        // A ringing check-in's cap is not a check-in: quiet hours never move it.
+        if (ringActive) return this
+        val adjusted = policy.quiet.adjust(next, nowMillis)
+        return if (adjusted == next) this else copy(nextAlarmAtMillis = adjusted)
+    }
+
     /** One alarm at a time: the next check-in while running, or the end of a timed pause. */
     private fun applyAlarm(state: SessionState, policy: SchedulingPolicy) {
         val next = state.nextAlarmAtMillis
         val pauseEnd = state.pausedUntilMillis
         when {
             state.status == SessionStatus.RUNNING && next != null ->
-                scheduler.schedule(next, allowExact = policy.allowExact)
+                scheduler.schedule(
+                    next,
+                    allowExact = policy.allowExact,
+                    // US-11: Ring check-ins and the ring cap are real alarms (alarm clock).
+                    alarmClock = state.ringActive || policy.alertStyle == AlertStyle.RING,
+                )
             state.status == SessionStatus.PAUSED && pauseEnd != null ->
                 scheduler.schedule(pauseEnd, allowExact = policy.allowExact)
             else -> scheduler.cancel()

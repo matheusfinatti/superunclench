@@ -90,6 +90,19 @@
     <string name="qa_btn_auto_pause">Auto-pause: %1$s</string>
     <string name="qa_btn_end_pause">End pause now</string>
     <string name="qa_btn_mark_missed">Mark missed</string>
+    <string name="qa_section_quiet">Quiet hours</string>
+    <string name="qa_jump_quiet">Quiet</string>
+    <string name="qa_btn_sim_quiet">Simulate quiet hours now: %1$s</string>
+    <string name="qa_btn_quiet_switch">Quiet hours switch: %1$s</string>
+    <string name="qa_btn_quiet_22">Preset: 22–07</string>
+    <string name="qa_btn_quiet_23">Preset: 23–08</string>
+    <string name="qa_btn_quiet_21">Preset: 21–06</string>
+    <string name="qa_msg_sim_quiet_on">Quiet hours simulated ON</string>
+    <string name="qa_msg_sim_quiet_off">Quiet hours simulated OFF — next check-in now</string>
+    <string name="qa_msg_quiet_on">Quiet hours ON</string>
+    <string name="qa_msg_quiet_off">Quiet hours OFF</string>
+    <string name="qa_msg_quiet_preset">Quiet hours %1$s</string>
+    <string name="qa_msg_quiet_deferred">Deferred to %1$s (quiet hours)</string>
     <string name="qa_section_history">History</string>
     <string name="qa_jump_history">History</string>
     <string name="qa_btn_seed_history">Seed sample history (30 days)</string>
@@ -113,4 +126,21 @@
     <string name="qa_msg_sub_level">Sub-level %1$d/%2$d</string>
     <string name="qa_msg_reset_all">All data reset</string>
     <string name="qa_msg_reset_progress">Progress reset</string>
+    <!-- US-11 -->
+    <string name="qa_label_alert">Alert</string>
+    <string name="qa_btn_alert_style">Alert style: %1$s</string>
+    <string name="qa_btn_short_ring_cap">Short ring cap (15 s): %1$s</string>
+    <string name="qa_btn_preview_fsi_denied">Preview: full-screen denied: %1$s</string>
+    <string name="qa_btn_preview_alarm">Preview alarm screen</string>
+    <string name="qa_btn_silence_ring">Silence ring</string>
+    <string name="qa_msg_alert_ring">Alert style: Ring</string>
+    <string name="qa_msg_alert_nudge">Alert style: Nudge</string>
+    <string name="qa_msg_short_ring_cap_on">Short ring cap ON (15 s)</string>
+    <string name="qa_msg_short_ring_cap_off">Short ring cap OFF (10 min)</string>
+    <string name="qa_msg_preview_fsi_on">Preview full-screen denied ON</string>
+    <string name="qa_msg_preview_fsi_off">Preview full-screen denied OFF</string>
+    <string name="qa_msg_preview_alarm">Alarm screen preview</string>
+    <string name="qa_msg_silenced">Silenced</string>
+    <string name="qa_msg_not_ringing">Not ringing</string>
+    <string name="qa_msg_ring_timed_out">Ring capped — recorded Missed (timeout)</string>
 </resources>

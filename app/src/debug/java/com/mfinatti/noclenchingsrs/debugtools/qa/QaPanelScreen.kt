@@ -131,6 +131,17 @@ object QaTestTags {
     const val AUTO_PAUSE = "qa_auto_pause"
     const val MARK_MISSED = "qa_mark_missed"
     const val SEED_HISTORY = "qa_seed_history"
+    const val ALERT_STYLE = "qa_alert_style"
+    const val SHORT_RING_CAP = "qa_short_ring_cap"
+    const val PREVIEW_FSI_DENIED = "qa_preview_fsi_denied"
+    const val PREVIEW_ALARM_SCREEN = "qa_preview_alarm_screen"
+    const val SILENCE_RING = "qa_silence_ring"
+    const val STATE_ALERT = "qa_state_alert"
+    const val SIM_QUIET = "qa_sim_quiet"
+    const val QUIET_SWITCH = "qa_quiet_switch"
+    const val QUIET_22 = "qa_quiet_preset_22"
+    const val QUIET_23 = "qa_quiet_preset_23"
+    const val QUIET_21 = "qa_quiet_preset_21"
     const val CLEAR_HISTORY = "qa_clear_history"
     const val END_PAUSE = "qa_end_pause"
     const val STATE_AUTO_PAUSE = "qa_state_auto_pause"
@@ -153,6 +164,7 @@ internal enum class QaSection(
     SESSION(R.string.qa_section_session, "qa_section_session", R.string.qa_jump_session, "session"),
     LEVEL(R.string.qa_section_level, "qa_section_level", R.string.qa_jump_level, "level"),
     HISTORY(R.string.qa_section_history, "qa_section_history", R.string.qa_jump_history, "history"),
+    QUIET(R.string.qa_section_quiet, "qa_section_quiet", R.string.qa_jump_quiet, "quiet"),
     PERMS(R.string.qa_section_perms, "qa_section_perms", R.string.qa_jump_perms, "perms"),
     DANGER(R.string.qa_section_danger, "qa_section_danger", R.string.qa_jump_danger, "danger"),
 }
@@ -383,6 +395,8 @@ internal fun QaPanelScreen(
                                 section = section,
                                 themeMode = readout?.settings?.themeMode ?: ThemeMode.SYSTEM,
                                 overrides = readout?.overrides ?: DebugOverrides(),
+                                quietEnabled = readout?.settings?.quietHoursEnabled ?: true,
+                                alertRing = readout?.settings?.alertStyle == com.mfinatti.noclenchingsrs.domain.settings.AlertStyle.RING,
                                 onAction = onAction,
                                 onOpenShade = onOpenShade,
                                 onPreviewRationale = onPreviewRationale,
@@ -467,8 +481,18 @@ private fun StateCard(
                 )
                 StateRow(
                     R.string.qa_label_quiet,
-                    QaFormat.quietHours(settings.quietHoursEnabled, settings.quietHoursPreset),
+                    QaFormat.quietHours(
+                        settings.quietHoursEnabled,
+                        settings.quietStartMinutes,
+                        settings.quietEndMinutes,
+                        readout.overrides.simulateQuietHours,
+                    ),
                     QaTestTags.STATE_QUIET,
+                )
+                StateRow(
+                    R.string.qa_label_alert,
+                    QaFormat.alert(settings.alertStyle, readout.fullScreenAllowed, readout.session),
+                    QaTestTags.STATE_ALERT,
                 )
                 StateRow(
                     R.string.qa_label_perms,
@@ -611,6 +635,8 @@ private fun SectionButtons(
     section: QaSection,
     themeMode: ThemeMode,
     overrides: DebugOverrides,
+    quietEnabled: Boolean,
+    alertRing: Boolean = false,
     onAction: (QaAction) -> Unit,
     onOpenShade: () -> Unit,
     onPreviewRationale: (RationaleMode) -> Unit,
@@ -655,6 +681,28 @@ private fun SectionButtons(
                 }
                 QaButton(stringResource(R.string.qa_btn_mark_missed), QaTestTags.MARK_MISSED) {
                     onAction(QaAction.MARK_MISSED)
+                }
+                // US-11 Ring.
+                QaButton(
+                    stringResource(
+                        R.string.qa_btn_alert_style,
+                        stringResource(if (alertRing) R.string.alert_ring else R.string.alert_nudge),
+                    ),
+                    QaTestTags.ALERT_STYLE,
+                ) { onAction(QaAction.TOGGLE_ALERT_STYLE) }
+                QaButton(stringResource(R.string.qa_btn_silence_ring), QaTestTags.SILENCE_RING) {
+                    onAction(QaAction.SILENCE_RING)
+                }
+                QaButton(
+                    stringResource(R.string.qa_btn_short_ring_cap, if (overrides.shortRingCap) on else off),
+                    QaTestTags.SHORT_RING_CAP,
+                ) { onAction(QaAction.TOGGLE_SHORT_RING_CAP) }
+                QaButton(
+                    stringResource(R.string.qa_btn_preview_fsi_denied, if (overrides.previewFullScreenDenied) on else off),
+                    QaTestTags.PREVIEW_FSI_DENIED,
+                ) { onAction(QaAction.TOGGLE_PREVIEW_FSI_DENIED) }
+                QaButton(stringResource(R.string.qa_btn_preview_alarm), QaTestTags.PREVIEW_ALARM_SCREEN) {
+                    onAction(QaAction.PREVIEW_ALARM_SCREEN)
                 }
                 QaButton(stringResource(R.string.qa_btn_open_shade), QaTestTags.OPEN_SHADE, onClick = onOpenShade)
                 QaButton(
@@ -732,6 +780,20 @@ private fun SectionButtons(
             }
 
             QaSection.LEVEL -> Unit
+
+            QaSection.QUIET -> {
+                QaButton(
+                    stringResource(R.string.qa_btn_sim_quiet, if (overrides.simulateQuietHours) on else off),
+                    QaTestTags.SIM_QUIET,
+                ) { onAction(QaAction.TOGGLE_SIM_QUIET) }
+                QaButton(
+                    stringResource(R.string.qa_btn_quiet_switch, if (quietEnabled) on else off),
+                    QaTestTags.QUIET_SWITCH,
+                ) { onAction(QaAction.TOGGLE_QUIET_SWITCH) }
+                QaButton(stringResource(R.string.qa_btn_quiet_22), QaTestTags.QUIET_22) { onAction(QaAction.QUIET_PRESET_22) }
+                QaButton(stringResource(R.string.qa_btn_quiet_23), QaTestTags.QUIET_23) { onAction(QaAction.QUIET_PRESET_23) }
+                QaButton(stringResource(R.string.qa_btn_quiet_21), QaTestTags.QUIET_21) { onAction(QaAction.QUIET_PRESET_21) }
+            }
 
             QaSection.HISTORY -> {
                 QaButton(stringResource(R.string.qa_btn_seed_history), QaTestTags.SEED_HISTORY) {

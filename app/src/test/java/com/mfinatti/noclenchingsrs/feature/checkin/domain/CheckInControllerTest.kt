@@ -31,8 +31,10 @@ class CheckInControllerTest {
     private class FakeScheduler : AlarmScheduler {
         var scheduledAt: Long? = null
         var lastAllowExact: Boolean? = null
-        override fun schedule(atMillis: Long, allowExact: Boolean) {
+        var lastAlarmClock: Boolean? = null
+        override fun schedule(atMillis: Long, allowExact: Boolean, alarmClock: Boolean) {
             lastAllowExact = allowExact
+            lastAlarmClock = alarmClock
             scheduledAt = atMillis
         }
 
@@ -49,8 +51,28 @@ class CheckInControllerTest {
             shownLevel = level
         }
 
+        var ringAt: Long? = null
+        var ringCapAt: Long? = null
+        var ringFullScreen: Boolean? = null
+        var silenced = false
+        var cancels = 0
+
+        override fun showRing(checkInAtMillis: Long, level: Int, capAtMillis: Long, fullScreen: Boolean, silenced: Boolean) {
+            ringAt = checkInAtMillis
+            ringCapAt = capAtMillis
+            ringFullScreen = fullScreen
+            this.silenced = silenced
+        }
+
+        override fun silenceRing() {
+            silenced = true
+        }
+
         override fun cancel() {
             shownAt = null
+            ringAt = null
+            silenced = false
+            cancels++
         }
     }
 
@@ -520,5 +542,366 @@ class CheckInControllerTest {
         val state = controller.resetProgress()
         assertEquals(SrsState(1, 0), state.srs)
         assertNull(scheduler.scheduledAt)
+    }
+
+    // --- US-10 quiet hours -----------------------------------------------------------------
+
+    private val utc = java.util.TimeZone.getTimeZone("UTC")
+
+    private fun quietController(rule: com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule) = CheckInController(
+        sessionRepository = sessions,
+        checkInLog = log,
+        sessionEngine = SessionEngine(SrsEngine()),
+        scheduler = scheduler,
+        notifier = notifier,
+        clock = AppClock { now },
+        policy = { SchedulingPolicy(quiet = rule) },
+    )
+
+    private val night = com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule(
+        enabled = true,
+        startMinutes = 22 * 60,
+        endMinutes = 7 * 60,
+        timeZone = java.util.TimeZone.getTimeZone("UTC"),
+    )
+
+    private fun utcAt(day: Int, hour: Int, minute: Int = 0): Long =
+        java.util.Calendar.getInstance(utc).apply {
+            clear()
+            set(2026, 9, day, hour, minute, 0)
+        }.timeInMillis
+
+    @Test
+    fun `an alarm that would be due in quiet hours is deferred to the end - no notification, no miss`() = runBlocking {
+        val c = quietController(night)
+        now = utcAt(1, 21, 58)
+        val started = c.start()
+        // 22:03 would be inside quiet hours: deferred to 07:00 next day.
+        assertEquals(utcAt(2, 7), started.nextAlarmAtMillis)
+        assertEquals(utcAt(2, 7), scheduler.scheduledAt)
+        assertNull(notifier.shownAt)
+        assertTrue(log.events.first().isEmpty())
+    }
+
+    @Test
+    fun `an alarm firing during quiet hours posts nothing and records nothing`() = runBlocking {
+        val c = quietController(night)
+        now = utcAt(1, 21, 0)
+        c.start()
+        now = utcAt(1, 23, 0) // e.g. a stale/forced delivery in the window
+        val result = c.fireAlarm(force = true)
+        assertEquals(FireResult.QuietDeferred(utcAt(2, 7)), result)
+        assertNull(notifier.shownAt)
+        assertTrue(log.events.first().isEmpty())
+        assertEquals(utcAt(2, 7), sessions.session.first().nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `at the end time the check-in fires and the level is unchanged`() = runBlocking {
+        val c = quietController(night)
+        c.setLevel(3)
+        now = utcAt(1, 21, 50)
+        c.start()
+        now = utcAt(2, 7, 0)
+        assertTrue(c.fireAlarm() is FireResult.Fired)
+        assertEquals(now, notifier.shownAt)
+        assertEquals(SrsState(3, 0), sessions.session.first().srs)
+    }
+
+    @Test
+    fun `quiet hours off - alarms fire at any time`() = runBlocking {
+        val c = quietController(night.copy(enabled = false))
+        now = utcAt(1, 23, 0)
+        val started = c.start()
+        assertEquals(now + 5 * minute, started.nextAlarmAtMillis)
+        now += 5 * minute
+        assertTrue(c.fireAlarm() is FireResult.Fired)
+    }
+
+    @Test
+    fun `simulated quiet hours defer until the preset end, and ending them makes the check-in due now`() = runBlocking {
+        val c = quietController(night.copy(simulate = true))
+        now = utcAt(1, 12, 0)
+        val started = c.start()
+        assertEquals(utcAt(2, 7), started.nextAlarmAtMillis)
+        val ended = quietController(night).quietHoursEnded()
+        assertEquals(now, ended.nextAlarmAtMillis)
+        assertEquals(now, scheduler.scheduledAt)
+    }
+
+    // --- US-10 reopened: editing the range while running (AC7) ---------------------------------
+
+    private var liveRule = night
+
+    private fun liveController() = CheckInController(
+        sessionRepository = sessions,
+        checkInLog = log,
+        sessionEngine = SessionEngine(SrsEngine()),
+        scheduler = scheduler,
+        notifier = notifier,
+        clock = AppClock { now },
+        policy = { SchedulingPolicy(quiet = liveRule) },
+    )
+
+    private fun window(start: Int, end: Int, enabled: Boolean = true) =
+        night.copy(enabled = enabled, startMinutes = start, endMinutes = end)
+
+    @Test
+    fun `range edit - deferred alarm and now outside the new window - next is now plus interval`() = runBlocking {
+        liveRule = night
+        val c = liveController()
+        now = utcAt(1, 23, 0)
+        assertEquals(utcAt(2, 7), c.start().nextAlarmAtMillis)
+        val state = c.quietHoursChanged { liveRule = window(13 * 60, 14 * 60) }
+        assertEquals(utcAt(1, 23, 5), state.nextAlarmAtMillis) // L1 = 5 min, as on Resume
+        assertEquals(utcAt(1, 23, 5), scheduler.scheduledAt)
+    }
+
+    @Test
+    fun `range edit - deferred alarm still inside the new window - moves to the new end`() = runBlocking {
+        liveRule = night
+        val c = liveController()
+        now = utcAt(1, 23, 0)
+        c.start()
+        val state = c.quietHoursChanged { liveRule = window(23 * 60, 8 * 60 + 15) }
+        assertEquals(utcAt(2, 8, 15), state.nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `range edit - now inside the new window - next check-in deferred to the new end`() = runBlocking {
+        liveRule = window(1 * 60, 2 * 60)
+        val c = liveController()
+        now = utcAt(1, 12, 0)
+        assertEquals(utcAt(1, 12, 5), c.start().nextAlarmAtMillis)
+        val state = c.quietHoursChanged { liveRule = window(11 * 60 + 30, 15 * 60 + 45) }
+        assertEquals(utcAt(1, 15, 45), state.nextAlarmAtMillis)
+        assertEquals(utcAt(1, 15, 45), scheduler.scheduledAt)
+    }
+
+    @Test
+    fun `range edit - alarm not deferred and outside the new window - kept as is`() = runBlocking {
+        liveRule = window(1 * 60, 2 * 60)
+        val c = liveController()
+        now = utcAt(1, 12, 0)
+        c.start()
+        now = utcAt(1, 12, 2)
+        val state = c.quietHoursChanged { liveRule = night }
+        assertEquals(utcAt(1, 12, 5), state.nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `switch off while deferred - next is now plus interval`() = runBlocking {
+        liveRule = night
+        val c = liveController()
+        now = utcAt(1, 23, 0)
+        c.start()
+        val state = c.quietHoursChanged { liveRule = night.copy(enabled = false) }
+        assertEquals(utcAt(1, 23, 5), state.nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `range edit while stopped changes nothing`() = runBlocking {
+        liveRule = night
+        val c = liveController()
+        now = utcAt(1, 23, 0)
+        val state = c.quietHoursChanged { liveRule = window(13 * 60, 14 * 60) }
+        assertEquals(SessionStatus.STOPPED, state.status)
+        assertNull(scheduler.scheduledAt)
+    }
+
+    // --- US-11 Ring ---------------------------------------------------------------------------
+
+    private var ringPolicy = SchedulingPolicy(alertStyle = com.mfinatti.noclenchingsrs.domain.settings.AlertStyle.RING)
+
+    private fun ringController() = CheckInController(
+        sessionRepository = sessions,
+        checkInLog = log,
+        sessionEngine = SessionEngine(SrsEngine()),
+        scheduler = scheduler,
+        notifier = notifier,
+        clock = AppClock { now },
+        policy = { ringPolicy },
+    )
+
+    private val cap = SchedulingPolicy.DEFAULT_RING_CAP.inWholeMilliseconds
+
+    private suspend fun ringing(c: CheckInController): Long {
+        c.start()
+        now += 5 * minute
+        assertTrue(c.fireAlarm() is FireResult.Fired)
+        return now
+    }
+
+    @Test
+    fun `ring - fires as a ring and the only alarm is the cap`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        assertEquals(firedAt, notifier.ringAt)
+        assertNull(notifier.shownAt)
+        assertEquals(firedAt + cap, scheduler.scheduledAt)
+        assertEquals(true, scheduler.lastAlarmClock) // B1: Ring alarms are alarm clocks
+        val s = sessions.session.first()
+        assertTrue(s.ringing)
+        assertEquals(firedAt + cap, s.nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `ring - no other check-in fires while ringing, even forced`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        now += 5 * minute // an L1 interval later: would normally be the next check-in
+        assertEquals(FireResult.Stale, c.fireAlarm())
+        assertEquals(FireResult.Stale, c.fireAlarm(force = true))
+        assertEquals(firedAt, sessions.session.first().pendingCheckInAtMillis)
+        assertTrue(log.events.first().isEmpty())
+    }
+
+    @Test
+    fun `ring - answer stops it and schedules from the answer`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        now += 30_000
+        val result = c.answer(com.mfinatti.noclenchingsrs.domain.srs.Answer.GOOD, firedAt, com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.ALARM_SCREEN)
+        assertTrue(result is AnswerResult.Applied)
+        assertNull(notifier.ringAt)
+        val s = sessions.session.first()
+        assertNull(s.ringCapAtMillis)
+        assertEquals(now + 5 * minute, s.nextAlarmAtMillis)
+        assertEquals(com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.ALARM_SCREEN, log.events.first().single().source)
+    }
+
+    @Test
+    fun `ring - cap records M timeout and schedules from the miss`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        now = firedAt + cap
+        val result = c.fireAlarm()
+        assertEquals(FireResult.RingTimedOut(autoPaused = false), result)
+        val event = log.events.first().single()
+        assertEquals(CheckInOutcome.MISSED, event.outcome)
+        assertEquals(com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.TIMEOUT, event.source)
+        assertNull(notifier.ringAt)
+        val s = sessions.session.first()
+        assertNull(s.pendingCheckInAtMillis)
+        assertEquals(1, s.consecutiveMisses)
+        assertEquals(now + 5 * minute, s.nextAlarmAtMillis)
+        assertEquals(now + 5 * minute, scheduler.scheduledAt)
+    }
+
+    @Test
+    fun `ring - three timeouts auto-pause`() = runBlocking {
+        val c = ringController()
+        c.start()
+        repeat(3) { i ->
+            now += 5 * minute
+            assertTrue(c.fireAlarm() is FireResult.Fired)
+            now += cap
+            val r = c.fireAlarm()
+            assertEquals(FireResult.RingTimedOut(autoPaused = i == 2), r)
+        }
+        val s = sessions.session.first()
+        assertEquals(SessionStatus.PAUSED, s.status)
+        assertTrue(s.autoPaused)
+        assertNull(scheduler.scheduledAt)
+    }
+
+    @Test
+    fun `ring - silence keeps it pending and the cap still applies`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        assertTrue(c.silenceRing())
+        assertTrue(notifier.silenced)
+        val s = sessions.session.first()
+        assertTrue(s.ringActive)
+        assertTrue(s.ringSilenced)
+        assertEquals(firedAt, s.pendingCheckInAtMillis)
+        assertTrue(!c.silenceRing()) // already silenced
+        now = firedAt + cap
+        assertTrue(c.fireAlarm() is FireResult.RingTimedOut)
+    }
+
+    @Test
+    fun `ring - stop and pause end it with nothing recorded`() = runBlocking {
+        val c = ringController()
+        ringing(c)
+        c.pause(null)
+        assertNull(notifier.ringAt)
+        var s = sessions.session.first()
+        assertNull(s.pendingCheckInAtMillis)
+        assertNull(s.ringCapAtMillis)
+        assertTrue(log.events.first().isEmpty())
+        c.resume()
+        now += 5 * minute
+        c.fireAlarm()
+        c.stop()
+        s = sessions.session.first()
+        assertNull(s.ringCapAtMillis)
+        assertNull(notifier.ringAt)
+        assertTrue(log.events.first().isEmpty())
+    }
+
+    @Test
+    fun `ring - switching to Nudge while ringing does not stop it, the next one is a nudge`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        ringPolicy = ringPolicy.copy(alertStyle = com.mfinatti.noclenchingsrs.domain.settings.AlertStyle.NUDGE)
+        assertTrue(sessions.session.first().ringing)
+        now += 10_000
+        c.answer(com.mfinatti.noclenchingsrs.domain.srs.Answer.BAD, firedAt, com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.NOTIFICATION)
+        now += 5 * minute
+        assertTrue(c.fireAlarm() is FireResult.Fired)
+        assertEquals(now, notifier.shownAt)
+        assertNull(notifier.ringAt)
+    }
+
+    @Test
+    fun `ring - quiet hours win, and the cap is never moved by quiet hours`() = runBlocking {
+        ringPolicy = ringPolicy.copy(quiet = night)
+        val c = ringController()
+        now = utcAt(1, 21, 0)
+        c.start()
+        now = utcAt(1, 23, 0)
+        val r = c.fireAlarm(force = true)
+        assertTrue(r is FireResult.QuietDeferred)
+        assertNull(notifier.ringAt)
+        // A ring that started just before the window keeps its cap inside the window.
+        ringPolicy = ringPolicy.copy(quiet = night.copy(startMinutes = 21 * 60 + 58))
+        sessions.update { it.copy(nextAlarmAtMillis = utcAt(1, 21, 55)) }
+        now = utcAt(1, 21, 55)
+        sessions.update { com.mfinatti.noclenchingsrs.domain.session.SessionState(status = SessionStatus.RUNNING, nextAlarmAtMillis = now) }
+        assertTrue(c.fireAlarm() is FireResult.Fired)
+        assertEquals(now + cap, sessions.session.first().nextAlarmAtMillis)
+    }
+
+    @Test
+    fun `ring - restore after process death rings again, a passed cap times out`() = runBlocking {
+        val c = ringController()
+        val firedAt = ringing(c)
+        notifier.ringAt = null
+        now += 60_000
+        c.restoreSchedule()
+        assertEquals(firedAt, notifier.ringAt)
+        assertEquals(firedAt + cap, scheduler.scheduledAt)
+        now = firedAt + cap + 5_000
+        c.restoreSchedule()
+        assertEquals(firedAt + cap, scheduler.scheduledAt) // past: fires at once
+        assertTrue(c.fireAlarm() is FireResult.RingTimedOut)
+    }
+
+    @Test
+    fun `ring - fullScreen flag follows the policy`() = runBlocking {
+        ringPolicy = ringPolicy.copy(fullScreenAllowed = false)
+        val c = ringController()
+        ringing(c)
+        assertEquals(false, notifier.ringFullScreen)
+    }
+
+    @Test
+    fun `nudge check-ins are plain exact alarms, ring check-ins alarm clocks`() = runBlocking {
+        controller.start()
+        assertEquals(false, scheduler.lastAlarmClock)
+        val c = ringController()
+        c.start()
+        assertEquals(true, scheduler.lastAlarmClock)
     }
 }

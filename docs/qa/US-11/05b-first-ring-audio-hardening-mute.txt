@@ -1,0 +1,9 @@
+# Captured from `dumpsys audio` / `dumpsys power` during the first locked Ring (Start → KEYCODE_POWER at ~20:05:24)
+10-01 20:05:29.074 - 10252 (com.mfinatti.noclenchingsrs) - ACQ *alarm* (partial)          # alarm fires
+10-01 20:05:30:141 AudioHardening background playback muted for com.mfinatti.noclenchingsrs (10252), level: full, reason: 0, usage: USAGE_ALARM
+10-01 20:05:35:768 player piid:39 event:muted updated source:opControlAudio
+10-01 20:05:37:990 player piid:39 event:muted updated source:opControlAudio
+  (dumpsys at ~20:05:37: mWakefulness=Asleep, ResumedActivity=MainActivity, player piid:39 state:started mutedState:opControlAudio)
+10-01 20:05:39.460 - 10252 (com.mfinatti.noclenchingsrs) - ACQ WindowManager/displayId:0 (screen-bright,on-after-release)   # screen on, AlarmActivity
+10-01 20:06:00:041 player piid:39 event:muted updated source:none                           # audible from here (~30 s after fire)
+# Vibration (dumpsys vibrator_manager): ALARM vibration started 20:05:29.123 (not affected)

@@ -33,6 +33,12 @@ data class DebugOverrides(
     val previewExactAlarmsDenied: Boolean = false,
     val standardNotificationButtons: Boolean = false,
     val autoPause: Boolean = true,
+    /** Debug: treat now as inside quiet hours until the preset's next end time (US-10). */
+    val simulateQuietHours: Boolean = false,
+    /** Debug: Ring auto-silence cap 15 s instead of 10 min (US-11; never scaled by short intervals). */
+    val shortRingCap: Boolean = false,
+    /** Debug: behave as if the Android 14+ full-screen intent permission were denied (US-11 AC9). */
+    val previewFullScreenDenied: Boolean = false,
 ) {
     /** Short intervals are only honoured where the build type allows them. */
     val shortIntervalsActive: Boolean
@@ -58,6 +64,9 @@ class DebugOverridesRepository(
                 standardNotificationButtons = prefs[Keys.STANDARD_NOTIFICATION_BUTTONS]
                     ?: defaults.standardNotificationButtons,
                 autoPause = prefs[Keys.AUTO_PAUSE] ?: defaults.autoPause,
+                simulateQuietHours = prefs[Keys.SIMULATE_QUIET] ?: defaults.simulateQuietHours,
+                shortRingCap = prefs[Keys.SHORT_RING_CAP] ?: defaults.shortRingCap,
+                previewFullScreenDenied = prefs[Keys.PREVIEW_FSI_DENIED] ?: defaults.previewFullScreenDenied,
             )
         }
         .distinctUntilChanged()
@@ -86,6 +95,18 @@ class DebugOverridesRepository(
         dataStore.edit { prefs -> prefs.setOrRemove(Keys.AUTO_PAUSE, enabled) }
     }
 
+    suspend fun setSimulateQuietHours(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs.setOrRemove(Keys.SIMULATE_QUIET, enabled) }
+    }
+
+    suspend fun setShortRingCap(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs.setOrRemove(Keys.SHORT_RING_CAP, enabled) }
+    }
+
+    suspend fun setPreviewFullScreenDenied(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs.setOrRemove(Keys.PREVIEW_FSI_DENIED, enabled) }
+    }
+
     suspend fun clear() {
         dataStore.edit { prefs -> prefs.clear() }
     }
@@ -97,5 +118,8 @@ class DebugOverridesRepository(
         val PREVIEW_EXACT_DENIED = booleanPreferencesKey("preview_exact_alarms_denied")
         val STANDARD_NOTIFICATION_BUTTONS = booleanPreferencesKey("standard_notification_buttons")
         val AUTO_PAUSE = booleanPreferencesKey("auto_pause")
+        val SIMULATE_QUIET = booleanPreferencesKey("simulate_quiet_hours")
+        val SHORT_RING_CAP = booleanPreferencesKey("short_ring_cap")
+        val PREVIEW_FSI_DENIED = booleanPreferencesKey("preview_fsi_denied")
     }
 }

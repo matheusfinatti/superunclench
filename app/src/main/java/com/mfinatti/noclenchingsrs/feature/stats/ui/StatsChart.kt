@@ -5,13 +5,22 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.runtime.CompositionLocalProvider
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +35,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -67,6 +80,7 @@ object ChartTestTags {
     const val READOUT = "chart_readout"
     const val PREV = "chart_prev"
     const val NEXT = "chart_next"
+    const val PLOT = "chart_plot"
 
     fun bar(index: Int) = "chart_bar_$index"
 }
@@ -384,39 +398,91 @@ private fun DrawScope.drawTooltip(
     }
 }
 
-/** Invisible, slot-sized tap targets with per-bucket semantics (§12), layered over the canvas. */
+/**
+ * Per-bucket semantics nodes (§12) layered exactly over the plot slots, plus one tap handler for
+ * the whole plot.
+ *
+ * Taps are resolved from the x position by a single pointer handler on the plot, and the per-bar
+ * nodes carry semantics only (no pointer input).
+ *
+ * US-08 B1: a node with an OnClick action gets its *touch* bounds grown to the 48dp minimum touch
+ * target, and Android builds a node's accessibility bounds from those touch bounds minus what later
+ * siblings cover. With 24/30 slots narrower than 48dp, each screen-reader box ended up shifted
+ * left by (48dp − slot)/2 and the last one absorbed the rest. The bars therefore get a zero minimum
+ * touch target via [LocalViewConfiguration], so their accessibility bounds equal the drawn slots
+ * while keeping a real click action for TalkBack double-tap.
+ */
 @Composable
 private fun SlotOverlay(stats: FrameStats, labels: ChartLabels, selected: Int?, onSelect: (Int?) -> Unit) {
-    Row(
+    val n = stats.buckets.size
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    // Custom layout (not a weighted Row) so each node sits at exactly the drawn slot
+    // [round(i·w/n), round((i+1)·w/n)) — weight rounding drifted up to ~2 px on 30 slots.
+    val baseViewConfiguration = LocalViewConfiguration.current
+    val exactSlots = remember(baseViewConfiguration) { ExactSlotViewConfiguration(baseViewConfiguration) }
+    Layout(
+        content = {
+            CompositionLocalProvider(LocalViewConfiguration provides exactSlots) {
+                stats.buckets.forEachIndexed { index, bucket ->
+                    val description = stringResource(
+                        R.string.chart_bar_a11y,
+                        labels.bucket[index],
+                        bucket.good,
+                        bucket.bad,
+                        bucket.missed,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .testTag(ChartTestTags.bar(index))
+                            .semantics {
+                                contentDescription = description
+                                role = Role.Button
+                                this.selected = selected == index
+                                onClick {
+                                    currentOnSelect(if (currentSelected == index) null else index)
+                                    true
+                                }
+                            },
+                    )
+                }
+            }
+        },
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = Y_COLUMN + Y_GAP),
-    ) {
-        stats.buckets.forEachIndexed { index, bucket ->
-            val description = stringResource(
-                R.string.chart_bar_a11y,
-                labels.bucket[index],
-                bucket.good,
-                bucket.bad,
-                bucket.missed,
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .testTag(ChartTestTags.bar(index))
-                    .semantics {
-                        contentDescription = description
-                        role = Role.Button
-                        this.selected = selected == index
-                    }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onSelect(if (selected == index) null else index) },
-            )
+            .padding(start = Y_COLUMN + Y_GAP)
+            .testTag(ChartTestTags.PLOT)
+            .pointerInput(n) {
+                detectTapGestures { offset ->
+                    val index = slotIndexAt(offset.x, size.width.toFloat(), n)
+                    currentOnSelect(if (currentSelected == index) null else index)
+                }
+            },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val edges = IntArray(n + 1) { i -> (width.toFloat() * i / n).roundToInt() }
+        val placeables = measurables.mapIndexed { i, m ->
+            m.measure(Constraints.fixed(edges[i + 1] - edges[i], height))
+        }
+        layout(width, height) {
+            placeables.forEachIndexed { i, p -> p.place(edges[i], 0) }
         }
     }
+}
+
+private const val READOUT_ONE_LINE_MAX_FONT_SCALE = 1.3f
+private val READOUT_MIN_FONT = 11.sp
+
+/** The host's view configuration, minus the minimum touch target (see [SlotOverlay]). */
+private class ExactSlotViewConfiguration(base: ViewConfiguration) : ViewConfiguration by base {
+    override val minimumTouchTargetSize: DpSize get() = DpSize.Zero
+}
+
+/** Bucket index under x (px from the plot's left edge); clamps to the first/last slot. */
+internal fun slotIndexAt(x: Float, plotWidth: Float, bucketCount: Int): Int {
+    if (bucketCount <= 0 || plotWidth <= 0f) return 0
+    return (x / (plotWidth / bucketCount)).toInt().coerceIn(0, bucketCount - 1)
 }
 
 /** US-08 §4.7: "(<) Tue, Sep 29 · 8 Good · 2 Bad · 0 Missed (>)" — never overlapped by the tooltip. */
@@ -447,16 +513,29 @@ private fun Readout(stats: FrameStats, labels: ChartLabels, selected: Int?, onSe
             val b = stats.buckets[selected]
             stringResource(R.string.readout_value, labels.bucket[selected], b.good, b.bad, b.missed)
         }
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium.tabular(),
-            color = if (selected == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(ChartTestTags.READOUT),
-        )
+        val color = if (selected == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+        val style = MaterialTheme.typography.bodyMedium.tabular().copy(color = color, textAlign = TextAlign.Center)
+        val readoutModifier = Modifier
+            .weight(1f)
+            .testTag(ChartTestTags.READOUT)
+        if (LocalDensity.current.fontScale <= READOUT_ONE_LINE_MAX_FONT_SCALE) {
+            // One line (US-08 follow-up): "11 AM–12 PM · 1 Good · 0 Bad · 0 Missed" steps down from
+            // bodyMedium to at most 11sp to fit between the chevrons on a compact phone.
+            BasicText(
+                text = text,
+                style = style,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = READOUT_MIN_FONT,
+                    maxFontSize = style.fontSize,
+                    stepSize = 0.5.sp,
+                ),
+                modifier = readoutModifier,
+            )
+        } else {
+            // Large font settings: wrap rather than shrink below the user's chosen size.
+            Text(text = text, style = style, maxLines = 3, modifier = readoutModifier)
+        }
         IconButton(
             onClick = { onSelect(if (selected == null) 0 else selected + 1) },
             enabled = selected == null || selected < last,

@@ -36,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -50,6 +51,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mfinatti.noclenchingsrs.R
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
+import com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule
+import com.mfinatti.noclenchingsrs.ui.components.QuietChip
 import com.mfinatti.noclenchingsrs.ui.components.StatusChip
 import com.mfinatti.noclenchingsrs.ui.theme.Dimens
 import com.mfinatti.noclenchingsrs.ui.theme.Spacing
@@ -75,6 +78,9 @@ object SessionCardTestTags {
     const val PAUSED_UNTIL = "paused_until"
     const val RESUME = "btn_resume"
     const val AUTOPAUSE_BANNER = "autopause_banner"
+    const val RINGING_NOW = "session_ringing_now"
+    const val QUIET_STATE = "quiet_state"
+    const val QUIET_NEXT_AT = "quiet_next_at"
 }
 
 /** Pause durations offered by the picker (real time; debug short mode scales them). */
@@ -87,6 +93,8 @@ enum class PauseChoice(val duration: Duration?) {
 private const val TICK_MILLIS = 1_000L
 private const val CROSSFADE_MILLIS = 300
 private const val STACK_FONT_SCALE = 1.5f
+private val CANCEL_TRIM = 12.dp
+private const val QUIET_TICK_MILLIS = 15_000L
 
 /** "04:59" under 1 h, "1:59:59" at 1 h or more; never negative (US-06 §2.1). */
 fun formatCountdown(remainingMillis: Long): String {
@@ -113,6 +121,9 @@ fun SessionCard(
     autoPaused: Boolean,
     notificationsBlocked: Boolean,
     intervalLabel: String,
+    quiet: QuietHoursRule = QuietHoursRule.Off,
+    /** US-11: a Ring check-in is unresolved, so no countdown runs ("Ringing now"). */
+    ringing: Boolean = false,
     onStartClick: () -> Unit,
     onStopClick: () -> Unit,
     onPause: (PauseChoice) -> Unit,
@@ -137,7 +148,18 @@ fun SessionCard(
             modifier = Modifier.padding(Dimens.cardPadding),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            StatusChip(status = status, modifier = Modifier.testTag(HomeTestTags.STATUS_CHIP))
+            // Quiet hours are evaluated against a slow clock so the card flips at the window edges.
+            val clock by produceState(initialValue = nowProvider(), quiet) {
+                while (true) {
+                    delay(QUIET_TICK_MILLIS)
+                    value = nowProvider()
+                }
+            }
+            val quietActive = status == SessionStatus.RUNNING && quiet.isActive(clock)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                StatusChip(status = status, modifier = Modifier.testTag(HomeTestTags.STATUS_CHIP))
+                if (quietActive) QuietChip()
+            }
             AnimatedContent(
                 targetState = status,
                 transitionSpec = { fadeIn(tween(CROSSFADE_MILLIS)) togetherWith fadeOut(tween(CROSSFADE_MILLIS)) },
@@ -147,7 +169,13 @@ fun SessionCard(
                     when (shownStatus) {
                         SessionStatus.STOPPED -> StoppedContent(intervalLabel = intervalLabel, onStartClick = onStartClick)
                         SessionStatus.RUNNING -> {
-                            Countdown(nextAlarmAtMillis = nextAlarmAtMillis, nowProvider = nowProvider)
+                            if (ringing) {
+                                RingingNow()
+                            } else if (quietActive) {
+                                QuietHoursContent(nextAlarmAtMillis = nextAlarmAtMillis)
+                            } else {
+                                Countdown(nextAlarmAtMillis = nextAlarmAtMillis, nowProvider = nowProvider)
+                            }
                             NotificationsBlockedCaption(visible = notificationsBlocked)
                             AnimatedContent(
                                 targetState = picking,
@@ -222,6 +250,61 @@ private fun StoppedContent(intervalLabel: String, onStartClick: () -> Unit) {
 }
 
 @Composable
+private fun QuietHoursContent(nextAlarmAtMillis: Long?) {
+    val context = LocalContext.current
+    val time = remember(nextAlarmAtMillis) {
+        nextAlarmAtMillis?.let { android.text.format.DateFormat.getTimeFormat(context).format(Date(it)) } ?: ""
+    }
+    val a11y = stringResource(R.string.quiet_a11y, time)
+    Column(
+        modifier = Modifier
+            .testTag(SessionCardTestTags.QUIET_STATE)
+            .semantics(mergeDescendants = true) { contentDescription = a11y },
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Text(
+            text = stringResource(R.string.quiet_overline).uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(R.string.quiet_next_at, time),
+            style = MaterialTheme.typography.titleLarge.tabular(),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag(SessionCardTestTags.QUIET_NEXT_AT),
+        )
+        Text(
+            text = stringResource(R.string.quiet_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** US-11 §5: replaces the countdown while a Ring check-in is unresolved. */
+@Composable
+private fun RingingNow() {
+    val a11y = stringResource(R.string.session_ringing_now_a11y)
+    Column(
+        modifier = Modifier
+            .testTag(SessionCardTestTags.RINGING_NOW)
+            .semantics(mergeDescendants = true) { contentDescription = a11y },
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Text(
+            text = stringResource(R.string.next_overline).uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(R.string.session_ringing_now),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
 private fun Countdown(nextAlarmAtMillis: Long?, nowProvider: () -> Long) {
     val now by produceState(initialValue = nowProvider(), nextAlarmAtMillis) {
         while (true) {
@@ -236,7 +319,8 @@ private fun Countdown(nextAlarmAtMillis: Long?, nowProvider: () -> Long) {
     val resources = LocalResources.current
     val atTime = remember(next) { android.text.format.DateFormat.getTimeFormat(context).format(Date(next)) }
     // Spoken label changes at most once a minute (until the last minute), so TalkBack isn't spammed.
-    val spokenBucket = if (remaining >= 60_000L) remaining / 60_000L else remaining / 1_000L + 100_000L
+    // Label changes only when the rounded minute changes, so TalkBack isn't spammed.
+    val spokenBucket = if (remaining < 60_000L) -1L else (remaining + 30_000L) / 60_000L
     val a11y = remember(spokenBucket, atTime) {
         resources.getString(R.string.next_a11y, spokenDuration(resources, remaining), atTime)
     }
@@ -275,16 +359,19 @@ private fun Countdown(nextAlarmAtMillis: Long?, nowProvider: () -> Long) {
     }
 }
 
-private fun spokenDuration(resources: android.content.res.Resources, remainingMillis: Long): String {
-    val totalSeconds = remainingMillis / 1_000L
-    val hours = (totalSeconds / 3_600).toInt()
-    val minutes = ((totalSeconds % 3_600) / 60).toInt()
-    val seconds = (totalSeconds % 60).toInt()
+/**
+ * Minutes-only spoken countdown (US-06 §7, revised): rounded to the nearest minute, "1 hour
+ * 5 minutes" from an hour, "less than a minute" under one minute.
+ */
+internal fun spokenDuration(resources: android.content.res.Resources, remainingMillis: Long): String {
+    if (remainingMillis < 60_000L) return resources.getString(R.string.duration_less_than_minute)
+    val totalMinutes = ((remainingMillis + 30_000L) / 60_000L).toInt()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
     return when {
         hours > 0 -> resources.getQuantityString(R.plurals.interval_hours_long, hours, hours) +
             if (minutes > 0) " " + resources.getQuantityString(R.plurals.interval_minutes_long, minutes, minutes) else ""
-        minutes > 0 -> resources.getQuantityString(R.plurals.interval_minutes_long, minutes, minutes)
-        else -> resources.getQuantityString(R.plurals.duration_seconds_long, seconds, seconds)
+        else -> resources.getQuantityString(R.plurals.interval_minutes_long, minutes, minutes)
     }
 }
 
@@ -416,7 +503,18 @@ private fun PausePicker(onChoose: (PauseChoice) -> Unit, onCancel: () -> Unit) {
                 modifier = Modifier.testTag(SessionCardTestTags.PAUSE_INDEF),
             )
         }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // The 48dp Cancel touch target adds ~12dp of blank space below its label; let it overlap the
+        // card's 20dp bottom padding so the picker ends like the other states (US-06 sign-off).
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    val trim = CANCEL_TRIM.roundToPx().coerceAtMost(placeable.height)
+                    layout(placeable.width, placeable.height - trim) { placeable.place(0, 0) }
+                },
+            horizontalArrangement = Arrangement.End,
+        ) {
             TextButton(
                 onClick = onCancel,
                 modifier = Modifier

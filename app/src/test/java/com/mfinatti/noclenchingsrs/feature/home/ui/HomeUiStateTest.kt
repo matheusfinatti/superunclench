@@ -4,6 +4,7 @@ import com.mfinatti.noclenchingsrs.data.debug.DebugOverrides
 import com.mfinatti.noclenchingsrs.domain.session.LastAnswer
 import com.mfinatti.noclenchingsrs.domain.session.SessionState
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
+import com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule
 import com.mfinatti.noclenchingsrs.domain.settings.UserSettings
 import com.mfinatti.noclenchingsrs.domain.srs.Answer
 import com.mfinatti.noclenchingsrs.domain.srs.LevelChange
@@ -27,6 +28,7 @@ class HomeUiStateTest {
                 level = 1,
                 subLevel = 0,
                 subLevelCount = 3,
+                quiet = QuietHoursRule.from(UserSettings(), simulate = false),
             ),
             state,
         )
@@ -113,5 +115,20 @@ class HomeUiStateTest {
             running.copy(exactTimingBannerDismissed = true).showExactTimingBanner(canScheduleExact = false),
         )
         assertEquals(true, running.copy(previewExactAlarmsDenied = true).showExactTimingBanner(canScheduleExact = true))
+    }
+
+    @Test
+    fun `L8 Good from the card shows no level message, from the notification it does`() {
+        fun msg(source: com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource) =
+            LevelMessage.from(LastAnswer(1L, Answer.GOOD, LevelChange.UNCHANGED, source))
+        assertEquals(null, msg(com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.CARD))
+        assertEquals(LevelMessage.MAX_GOOD, msg(com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.NOTIFICATION))
+        // Promotions from the card still celebrate.
+        assertEquals(
+            LevelMessage.LEVEL_UP,
+            LevelMessage.from(
+                LastAnswer(1L, Answer.GOOD, LevelChange.PROMOTED, com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource.CARD),
+            ),
+        )
     }
 }

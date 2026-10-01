@@ -52,8 +52,12 @@ class HomeViewModel(
         viewModelScope.launch { settingsRepository.setDisclaimerDismissed(true) }
     }
 
-    fun onStart() {
-        viewModelScope.launch { checkInController.start() }
+    /** Starts the session; returns the new state (Home shows a note when starting in quiet hours). */
+    suspend fun start(): SessionState = checkInController.start()
+
+    /** US-11: Silence on the pending card. */
+    fun onSilenceRing() {
+        viewModelScope.launch { checkInController.silenceRing() }
     }
 
     fun onStop() {

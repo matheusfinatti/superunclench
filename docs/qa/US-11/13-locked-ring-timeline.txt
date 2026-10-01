@@ -1,0 +1,119 @@
+T=20:10:58
+  mWakefulness=Dozing
+mWakefulness=3
+MainActivity t
+T=20:10:59
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:11:00
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:11:01
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:11:02
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:11:03
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:04
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:06
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:07
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:08
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:09
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:10
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:11
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:12
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:13
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:14
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:15
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:16
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:17
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:18
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:19
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:11:20
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+

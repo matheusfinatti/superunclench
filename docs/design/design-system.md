@@ -313,10 +313,16 @@ Never use `errorContainer` for banners (keeps the app calm).
 ### 9.6 `HistoryRow`
 M3 `ListItem`: leading 40dp circle badge (semantic container + icon 20dp in semantic on-container), headline (bodyLarge) "Good"/"Bad"/"Missed", supporting (bodyMedium, `onSurfaceVariant`) "Level 3 · Aware", trailing (labelLarge tabular, `onSurfaceVariant`) time. Min height 64dp. Dividers: none (use 0dp spacing; list lives in a `surfaceContainer` card).
 
+
+### 9.7 `AlarmAnswerTile` (US-11 alarm screen)
+- Large Good/Bad target: ≥ 128dp tall (≥ 96dp in landscape), half width (≥ 160dp), shape `extraLarge`, gap 12dp. Good left, Bad right.
+- Good: `good`/`onGood`, `ic_good` 36dp; Bad: `bad`/`onBad`, `ic_bad` 36dp. Label `headlineSmall` 500, caption `bodyMedium` at 85%.
+- Accidental-touch guard: ignore input for 800 ms after show (fade-in), single pointer only, cancel on > 24dp drag, `filterTouchesWhenObscured`. Accessibility clicks bypass the guard.
+- Stacks vertically (Good on top, full width, ≥ 112dp) at fontScale ≥ 1.5 or width < 160dp.
 ---
 
 ## 10. Accessibility baseline (applies to every screen)
-- Touch targets ≥ 48dp; spacing between adjacent targets ≥ 8dp.
+- Touch targets ≥ 48dp; spacing between adjacent targets ≥ 8dp. **Exception:** dense chart bars (e.g. 24 per-hour slots) may be narrower than 48dp *only* when an equivalent full-size control exists (the Stats ‹ › readout, US-08 §4.7); their semantics nodes must match the drawn slots exactly.
 - Contrast per §2.5; never colour-only meaning.
 - Every icon-only element has a `contentDescription`; decorative icons next to text use `null`.
 - TalkBack order = visual order top→bottom, left→right; each card merges into logical groups (`Modifier.semantics(mergeDescendants = true)`) except interactive children.

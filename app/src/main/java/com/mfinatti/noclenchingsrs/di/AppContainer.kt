@@ -12,12 +12,14 @@ import com.mfinatti.noclenchingsrs.data.settingsDataStore
 import com.mfinatti.noclenchingsrs.debugtools.DebugTools
 import com.mfinatti.noclenchingsrs.debugtools.DebugToolsProvider
 import com.mfinatti.noclenchingsrs.domain.session.SessionEngine
+import com.mfinatti.noclenchingsrs.domain.settings.QuietHoursRule
 import com.mfinatti.noclenchingsrs.domain.settings.UserSettings
 import com.mfinatti.noclenchingsrs.domain.srs.SrsEngine
 import com.mfinatti.noclenchingsrs.feature.checkin.alarm.AndroidAlarmScheduler
 import com.mfinatti.noclenchingsrs.feature.checkin.domain.CheckInController
 import com.mfinatti.noclenchingsrs.feature.checkin.domain.SchedulingPolicy
 import com.mfinatti.noclenchingsrs.feature.checkin.notification.AndroidCheckInNotifier
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.FullScreenStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,7 +35,7 @@ import java.io.File
  */
 class AppContainer(context: Context) {
 
-    private val appContext: Context = context.applicationContext
+    val appContext: Context = context.applicationContext
 
     /** Process-lifetime scope for hot flows and fire-and-forget writes. */
     val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -71,13 +73,22 @@ class AppContainer(context: Context) {
     /** The single place debug switches turn into timing/presentation policy (release: defaults). */
     suspend fun schedulingPolicy(): SchedulingPolicy {
         val overrides = debugOverridesRepository.overrides.first()
+        val settings = settingsRepository.settings.first()
         return SchedulingPolicy(
+            quiet = QuietHoursRule.from(settings, simulate = overrides.simulateQuietHours),
             scale = overrides.intervalScale,
             allowExact = !overrides.previewExactAlarmsDenied,
             customNotificationLayout = !overrides.standardNotificationButtons,
             autoPause = overrides.autoPause,
+            alertStyle = settings.alertStyle,
+            ringCap = if (overrides.shortRingCap) SchedulingPolicy.SHORT_RING_CAP else SchedulingPolicy.DEFAULT_RING_CAP,
+            fullScreenAllowed = canUseFullScreenIntent(overrides),
         )
     }
+
+    /** US-11: the Android 14+ full-screen permission, or the debug "Preview: full-screen denied". */
+    fun canUseFullScreenIntent(overrides: com.mfinatti.noclenchingsrs.data.debug.DebugOverrides): Boolean =
+        !overrides.previewFullScreenDenied && FullScreenStatus.canUseFullScreenIntent(appContext)
 
     /**
      * Settings as a hot StateFlow: null until DataStore's first emission. The activity waits for a

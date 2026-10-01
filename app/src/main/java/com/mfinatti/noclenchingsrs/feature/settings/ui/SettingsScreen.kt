@@ -18,6 +18,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.mfinatti.noclenchingsrs.domain.settings.AlertStyle
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.FullScreenStatus
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.RingSettingsLinks
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,6 +90,7 @@ object SettingsTestTags {
     const val DIALOG_CONFIRM = "dialog_reset_confirm"
     const val DIALOG_CANCEL = "dialog_reset_cancel"
     const val ABOUT = "settings_about"
+    const val QUIET_SWITCH = QuietTestTags.SWITCH
 }
 
 /** Max name length (US-09 §2); the counter appears from [NAME_COUNTER_FROM] characters. */
@@ -107,6 +115,21 @@ fun SettingsRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
+    val context = LocalContext.current
+    // US-11: permission state behind the Ring banners, re-checked on every resume.
+    val overrides by container.debugOverridesRepository.overrides.collectAsStateWithLifecycle(initialValue = null)
+    var fsiGranted by remember { mutableStateOf(FullScreenStatus.canUseFullScreenIntent(context)) }
+    var exactGranted by remember { mutableStateOf(container.alarmScheduler.canScheduleExactAlarms()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        fsiGranted = FullScreenStatus.canUseFullScreenIntent(context)
+        exactGranted = container.alarmScheduler.canScheduleExactAlarms()
+    }
+    fun showSnackbar(message: String) {
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
+        }
+    }
     SettingsScreen(
         settings = settings,
         onNameChange = viewModel::onNameChange,
@@ -119,6 +142,25 @@ fun SettingsRoute(
             }
         },
         onOpenAbout = onOpenAbout,
+        onQuietEnabledChange = { enabled ->
+            viewModel.onQuietHoursEnabled(enabled)
+            showSnackbar(resources.getString(if (enabled) R.string.snackbar_quiet_on else R.string.snackbar_quiet_off))
+        },
+        fullScreenDenied = !fsiGranted || overrides?.previewFullScreenDenied == true,
+        exactDenied = !exactGranted || overrides?.previewExactAlarmsDenied == true,
+        onAlertStyleChange = { style ->
+            viewModel.onAlertStyle(style)
+            val name = resources.getString(if (style == AlertStyle.RING) R.string.alert_ring else R.string.alert_nudge)
+            showSnackbar(resources.getString(R.string.snackbar_alert_style, name))
+        },
+        onAllowFullScreen = { RingSettingsLinks.openFullScreenSettings(context) },
+        onAllowExact = { RingSettingsLinks.openExactAlarmSettings(context) },
+        onQuietRangeChange = { start, end ->
+            viewModel.onQuietHoursRange(start, end)
+            showSnackbar(
+                resources.getString(R.string.snackbar_quiet_range, quietClock(context, start), quietClock(context, end)),
+            )
+        },
         snackbarHostState = snackbarHostState,
         debugEntry = debugEntry,
     )
@@ -137,6 +179,13 @@ fun SettingsScreen(
     onResetConfirmed: () -> Unit,
     onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier,
+    onQuietEnabledChange: (Boolean) -> Unit = {},
+    onQuietRangeChange: (startMinutes: Int, endMinutes: Int) -> Unit = { _, _ -> },
+    fullScreenDenied: Boolean = false,
+    exactDenied: Boolean = false,
+    onAlertStyleChange: (AlertStyle) -> Unit = {},
+    onAllowFullScreen: () -> Unit = {},
+    onAllowExact: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     debugEntry: @Composable () -> Unit = {},
 ) {
@@ -171,6 +220,27 @@ fun SettingsScreen(
                 }
                 SettingsGroup(title = stringResource(R.string.settings_group_appearance)) {
                     ThemeSelector(mode = settings.themeMode, onThemeChange = onThemeChange)
+                }
+                SettingsGroup(title = stringResource(R.string.settings_group_checkins)) {
+                    AlertStyleSettings(
+                        style = settings.alertStyle,
+                        fullScreenDenied = fullScreenDenied,
+                        exactDenied = exactDenied,
+                        onStyleChange = onAlertStyleChange,
+                        onAllowFullScreen = onAllowFullScreen,
+                        onAllowExact = onAllowExact,
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    QuietHoursSettings(
+                        enabled = settings.quietHoursEnabled,
+                        startMinutes = settings.quietStartMinutes,
+                        endMinutes = settings.quietEndMinutes,
+                        onEnabledChange = onQuietEnabledChange,
+                        onRangeChange = onQuietRangeChange,
+                    )
                 }
                 SettingsGroup(title = stringResource(R.string.settings_group_progress)) {
                     ListItem(
@@ -304,6 +374,7 @@ fun NameField(initialName: String, onNameChange: (String) -> Unit, modifier: Mod
             .testTag(SettingsTestTags.NAME_FIELD),
     )
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

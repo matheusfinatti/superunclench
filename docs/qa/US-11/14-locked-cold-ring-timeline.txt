@@ -1,0 +1,90 @@
+T=20:14:56
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:14:57
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:14:58
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:14:59
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:15:00
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:15:01
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:15:02
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:15:03
+  mWakefulness=Asleep
+mWakefulness=0
+T=20:15:04
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:05
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:06
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:07
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:08
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:09
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:10
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:11
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:12
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:14
+  mWakefulness=Asleep
+mWakefulness=0
+state:started
+mutedState:none
+T=20:15:15
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+T=20:15:16
+  mWakefulness=Awake
+mWakefulness=1
+state:started
+mutedState:none
+AlarmActivity t
+  10-01 20:05:30:141 AudioHardening background playback muted for com.mfinatti.noclenchingsrs (10252), level: full, reason: 0, usage: USAGE_ALARM
+  10-01 20:15:04:271 AudioHardening focus request for req 2 would be ignored for com.mfinatti.noclenchingsrs (10252), android.media.AudioManager@a75646d, level: full usage: 4 exemption: 4
+  10-01 20:15:04:352 AudioHardening background playback would be muted for com.mfinatti.noclenchingsrs (10252), level: full, reason: 4, usage: USAGE_ALARM
+

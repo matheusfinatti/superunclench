@@ -13,6 +13,42 @@
     <string name="home_subtitle_stopped">Ready when you are.</string>
     <string name="home_subtitle_running">Check-ins are on. Keep it loose.</string>
     <string name="home_subtitle_paused">Taking a break.</string>
+    <string name="home_subtitle_quiet">Quiet hours — rest easy.</string>
+    <string name="quiet_title">Quiet hours</string>
+    <string name="quiet_support">No check-ins while you rest.</string>
+    <string name="quiet_starts">Starts</string>
+    <string name="quiet_ends">Ends</string>
+    <string name="quiet_next_day">Next day</string>
+    <string name="quiet_duration">%1$s of quiet</string>
+    <string name="quiet_change_action">Change</string>
+    <string name="quiet_picker_title_start">Quiet hours start</string>
+    <string name="quiet_picker_title_end">Quiet hours end</string>
+    <string name="quiet_picker_error_same">Start and end can\'t be the same</string>
+    <string name="quiet_picker_ok">OK</string>
+    <string name="quiet_picker_cancel">Cancel</string>
+    <string name="quiet_picker_to_input_cd">Switch to text input</string>
+    <string name="quiet_picker_to_dial_cd">Switch to clock</string>
+    <string name="duration_short_h">%1$d h</string>
+    <string name="duration_short_min">%1$d min</string>
+    <string name="duration_short_h_min">%1$d h %2$d min</string>
+    <plurals name="duration_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <plurals name="duration_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <string name="quiet_chip">Quiet hours</string>
+    <string name="quiet_overline">Quiet hours</string>
+    <string name="quiet_next_at">Next check-in at %1$s</string>
+    <string name="quiet_a11y">Quiet hours — next check-in at %1$s</string>
+    <string name="quiet_body">Rest easy — no check-ins until then.</string>
+    <string name="quiet_start_snackbar">Started. First check-in at %1$s, after quiet hours.</string>
+    <string name="snackbar_quiet_range">Quiet hours %1$s – %2$s</string>
+    <string name="snackbar_quiet_on">Quiet hours on</string>
+    <string name="snackbar_quiet_off">Quiet hours off</string>
+    <string name="settings_group_checkins">Check-ins</string>
     <string name="home_subtitle_pending">Quick check: how\'s your jaw?</string>
     <string name="disclaimer_body">SuperUnclench is an awareness tool, not medical advice. If you have jaw pain, talk to a dentist or doctor.</string>
     <string name="disclaimer_action">Got it</string>
@@ -79,10 +115,7 @@
     <string name="autopause_title">Paused — you missed 3 check-ins. Resume?</string>
     <string name="autopause_body">No worries — we stopped so we won\'t nag you while you\'re away.</string>
     <string name="pending_missed_hint">Missed the last one — that\'s fine.</string>
-    <plurals name="duration_seconds_long">
-        <item quantity="one">%d second</item>
-        <item quantity="other">%d seconds</item>
-    </plurals>
+    <string name="duration_less_than_minute">less than a minute</string>
     <string name="session_stopped_helper">You\'ll get a quick check-in every %1$s. Answer with one tap.</string>
     <string name="snackbar_stopped">Check-ins stopped. Your level is saved.</string>
 
@@ -165,7 +198,7 @@
     <string name="chart_frame_7d_a11y">last 7 days</string>
     <string name="chart_frame_30d_a11y">last 30 days</string>
     <string name="chart_summary_a11y">%1$s, %2$s. %3$d Good, %4$d Bad.</string>
-    <string name="chart_summary_highest_a11y">Highest: %1$s with %2$d Good and %3$d Bad.</string>
+    <string name="chart_summary_highest_a11y">Busiest: %1$s with %2$d Good and %3$d Bad.</string>
     <string name="history_title">Recent check-ins</string>
     <string name="history_level">Level %1$d · %2$s</string>
     <string name="history_yesterday">Yesterday %1$s</string>
@@ -199,4 +232,36 @@
     <string name="about_version">Version %1$s (%2$d)</string>
     <string name="about_how_title">How it works</string>
     <string name="about_how_body">SuperUnclench checks in now and then to ask if your jaw is relaxed. Answer Good or Bad. The more often you\'re relaxed, the less often it asks.</string>
+
+    <!-- US-11 Alert style -->
+    <string name="settings_alert_style">Alert style</string>
+    <string name="settings_alert_style_support">How check-ins get your attention.</string>
+    <string name="alert_nudge">Nudge</string>
+    <string name="alert_nudge_desc">One sound and buzz</string>
+    <string name="alert_ring">Ring</string>
+    <string name="alert_ring_desc">Rings like an alarm until you answer</string>
+    <string name="alert_ring_note">Rings even on silent, at your alarm volume. Stops by itself after 10 min.</string>
+    <string name="snackbar_alert_style">Alert style: %1$s</string>
+    <string name="banner_fsi_title">Ring can\'t show full screen</string>
+    <string name="banner_fsi_body">It will ring as a notification instead. Allow full screen to see check-ins on your lock screen.</string>
+    <string name="banner_fsi_action">Allow full screen</string>
+    <string name="ring_channel_name">Check-in alarms</string>
+    <string name="ring_channel_desc">Check-ins that ring until you answer (Ring alert style).</string>
+    <string name="alarm_pane_title">Check-in alarm. Is your jaw relaxed?</string>
+    <string name="alarm_header">SuperUnclench · Check-in</string>
+    <string name="alarm_level">Level %1$d · %2$s</string>
+    <string name="alarm_question">Is your jaw relaxed?</string>
+    <string name="alarm_body">Notice it, then tap one.</string>
+    <string name="alarm_silence">Silence</string>
+    <string name="alarm_silence_a11y">Silence alarm</string>
+    <string name="alarm_silenced">Silenced</string>
+    <string name="alarm_still_waiting">Still waiting for your answer.</string>
+    <string name="alarm_level_up_line">Level up! Check-ins now every %1$s.</string>
+    <string name="ring_notif_subtext">Ringing</string>
+    <string name="ring_notif_subtext_silenced">Silenced</string>
+    <string name="ring_notif_collapsed_text">Ringing — tap to answer</string>
+    <string name="pending_overline_ringing">Ringing · %1$s</string>
+    <string name="pending_silenced_hint">Silenced — still waiting for your answer.</string>
+    <string name="session_ringing_now">Ringing now</string>
+    <string name="session_ringing_now_a11y">Check-in ringing now</string>
 </resources>

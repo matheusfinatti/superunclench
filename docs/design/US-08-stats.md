@@ -132,6 +132,7 @@ Row under the chart, 48dp tall, inside the chart card:
 ```
 - `IconButton`s 48dp `ic_chevron_left` (add Material Symbol `chevron_left`) / `ic_chevron_right`: select previous/next bucket (if none selected, `<` selects the last bucket, `>` the first). Disabled at the ends.
 - Text `bodyMedium` `onSurface`, centred, `tnum`, 2 lines max. Nothing selected: "Tap a bar to see details" in `onSurfaceVariant`.
+- Hour buckets use the **compact range** in the readout and tooltip: "11 AM–12 PM" (no ":00"; 24-h locales "11–12"), so "11 AM–12 PM · 0 Good · 0 Bad · 1 Missed" fits one line at 1.0 font scale on 360dp+. Two lines remain allowed only at larger font scales (row grows, text stays centred). *(Added 2026-10-01, US-08 sign-off.)*
 - The readout is what QA screenshots to verify "tapping a bar shows its exact counts" (tooltip may overlap; readout never does).
 
 ### 4.8 Animation
@@ -250,7 +251,7 @@ Total events: 309. Today chart: bars at hours 08 (B1), 09 (G1), 10 (G1), 12 (B1)
 Chart card `surfaceContainer`, shape `large`, padding 16dp; bars `good` / `bad` (+ hatch `onBad` 35%); grid `outlineVariant`; baseline `outline`; axis text `labelSmall` `onSurfaceVariant`; tooltip `inverseSurface`/`inverseOnSurface`, shape `small`; tiles per design-system §9.5.
 
 ## 12. Accessibility
-- Chart `Canvas` has a merged contentDescription summarising the frame: "Check-ins per day, last 7 days. 45 Good, 12 Bad. Highest: Tue, Sep 29 with 8 Good and 2 Bad."
+- Chart `Canvas` has a merged contentDescription summarising the frame: "Check-ins per day, last 7 days. 45 Good, 12 Bad. Busiest: Tue, Sep 29 with 8 Good and 2 Bad." ("Busiest" = most answers; ties → the most recent bucket. Revised 2026-10-01.)
 - Each bucket exposes a virtual semantics node (via `Modifier.semantics` on an invisible `Row` of slot-sized `Box`es layered over the canvas) with label "Tue, Sep 29: 8 Good, 2 Bad, 0 Missed" and `onClick` = select. This also gives QA/UiAutomator targetable nodes.
 - Prev/Next buttons give ≥ 48dp targets even when bars are 10dp wide (30-day frame).
 - Good/Bad never colour-only: legend labels, hatch pattern, stacking order, readout words.

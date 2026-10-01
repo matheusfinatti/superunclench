@@ -19,6 +19,12 @@ enum class CheckInSource {
     /** Missed because the notification was dismissed (US-07). */
     DISMISSED,
 
+    /** Good/Bad on the full-screen alarm screen (US-11 Ring). */
+    ALARM_SCREEN,
+
+    /** Missed because a Ring check-in hit the auto-silence cap unanswered (US-11). */
+    TIMEOUT,
+
     /** Debug "Seed sample history" (US-08). */
     SEED,
 

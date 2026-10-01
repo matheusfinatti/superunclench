@@ -111,7 +111,7 @@ Chip paused: `secondaryContainer`. Resume: filled `primary`. Pause: `FilledTonal
 - Countdown: no animation.
 
 ## 7. Accessibility
-- Countdown: merged semantic label "Next check-in in 12 minutes 34 seconds, at 2:32 PM"; **not** a live region. Update contentDescription at most every 60 s to avoid TalkBack churn (visual still ticks).
+- Countdown: merged semantic label **minutes-only** (revised 2026-10-01): "Next check-in in 13 minutes, at 2:32 PM" — minutes **rounded to nearest** (02:59 → "3 minutes"), ≥ 1 h → "in 1 hour 5 minutes"; under 1 minute → "in less than a minute". **Not** a live region. Update contentDescription at most every 60 s to avoid TalkBack churn (visual still ticks). The absolute "at HH:MM" carries the precision.
 - Chips are buttons (`Role.Button`), 48dp min touch.
 - At fontScale ≥ 1.5 buttons stack vertically (Resume/Pause above Stop), full width.
 

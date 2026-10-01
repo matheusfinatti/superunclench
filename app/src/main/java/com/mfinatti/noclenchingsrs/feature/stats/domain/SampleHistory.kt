@@ -54,7 +54,7 @@ object SampleHistory {
                 raw += at(nowMillis, timeZone, daysAgo, 8 * 60 + 45 * k) to outcome
             }
         }
-        TODAY.forEach { (h, m, outcome) -> raw += at(nowMillis, timeZone, 0, h * 60 + m) to outcome }
+        raw += todayEvents(nowMillis, timeZone)
 
         // Replay the SRS engine from L1/0 so each event carries a realistic level.
         var srs = SrsState()
@@ -73,6 +73,24 @@ object SampleHistory {
                 subLevelAfter = srs.subLevel,
             )
         }
+    }
+
+    /**
+     * Today's events at their nominal times, shifted earlier so the last one is at or before now
+     * (Decisions log 2026-10-01); compressed into [midnight, now] if a plain shift would cross
+     * midnight. Counts never change.
+     */
+    private fun todayEvents(nowMillis: Long, timeZone: TimeZone): List<Pair<Long, CheckInOutcome>> {
+        val nominal = TODAY.map { (h, m, outcome) -> at(nowMillis, timeZone, 0, h * 60 + m) to outcome }
+        val first = nominal.first().first
+        val last = nominal.last().first
+        if (last <= nowMillis) return nominal
+        val dayStart = StatsCalculator.startOfDay(nowMillis, timeZone).timeInMillis
+        val shift = nowMillis - last
+        if (first + shift >= dayStart) return nominal.map { (t, o) -> (t + shift) to o }
+        val span = (last - first).toDouble()
+        val room = (nowMillis - dayStart).toDouble()
+        return nominal.map { (t, o) -> (dayStart + ((t - first) / span * room).toLong()) to o }
     }
 
     private fun at(nowMillis: Long, timeZone: TimeZone, daysAgo: Int, minuteOfDay: Int): Long =

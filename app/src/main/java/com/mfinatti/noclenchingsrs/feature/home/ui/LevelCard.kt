@@ -49,7 +49,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import kotlin.math.roundToInt
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mfinatti.noclenchingsrs.R
@@ -304,9 +306,15 @@ private fun NumberRow(level: Int, maxLevel: Int, expandedWidth: Boolean, stacked
             ofTotal(Modifier)
         }
     } else {
-        // "of 8" sits right after the number, on its baseline (US-04 design follow-up 2).
+        // "of 8" sits right after the number, on its baseline (US-04 design follow-up 2). The
+        // number's baseline is computed from the text style rather than read from AnimatedContent,
+        // which has two children mid-transition and would lose/shift the alignment line.
+        val textMeasurer = rememberTextMeasurer()
+        val numberBaseline = remember(numberStyle, textMeasurer) {
+            textMeasurer.measure(level.toString(), numberStyle).firstBaseline.roundToInt()
+        }
         Row(modifier = Modifier.fillMaxWidth()) {
-            number(Modifier.alignByBaseline())
+            number(Modifier.alignBy { numberBaseline })
             Spacer(Modifier.width(Spacing.sm))
             ofTotal(Modifier.alignByBaseline())
         }

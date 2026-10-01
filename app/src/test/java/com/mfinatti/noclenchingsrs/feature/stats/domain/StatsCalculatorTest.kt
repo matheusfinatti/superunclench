@@ -151,4 +151,25 @@ class StatsCalculatorTest {
         assertEquals(200, StatsCalculator.yMax(200))
         assertEquals(250, StatsCalculator.yMax(201))
     }
+
+    @Test
+    fun `seed never creates events after now and keeps the expected numbers`() {
+        zones.forEach { tz ->
+            listOf(
+                localTime(tz, 2026, 3, 9, 10, 16), // mid-morning: plain shift
+                localTime(tz, 2026, 3, 9, 0, 30), // just after midnight: compressed
+            ).forEach { now ->
+                val events = SampleHistory.generate(now, tz)
+                assertEquals(tz.id, 309, events.size)
+                assertEquals(tz.id, true, events.all { it.atMillis <= now })
+                val today = StatsCalculator.compute(events, StatsFrame.TODAY, now, tz)
+                assertEquals(tz.id, listOf(5, 2, 1), listOf(today.good, today.bad, today.missed))
+                val week = StatsCalculator.compute(events, StatsFrame.WEEK, now, tz)
+                assertEquals(tz.id, listOf(45, 12, 1), listOf(week.good, week.bad, week.missed))
+                val month = StatsCalculator.compute(events, StatsFrame.MONTH, now, tz)
+                assertEquals(tz.id, listOf(188, 98, 23), listOf(month.good, month.bad, month.missed))
+                assertEquals(tz.id, 4, StatsCalculator.streak(events, now, tz))
+            }
+        }
+    }
 }

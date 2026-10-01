@@ -42,6 +42,10 @@ class CheckInActionReceiver : BroadcastReceiver() {
         val answer = when (intent.action) {
             ACTION_GOOD -> Answer.GOOD
             ACTION_BAD -> Answer.BAD
+            ACTION_SILENCE -> {
+                runAsync(context) { app -> app.container.checkInController.silenceRing() }
+                return
+            }
             ACTION_DISMISSED -> {
                 // Swiped away / "Clear all" (the notification's deleteIntent; not sent for our own
                 // cancel() or for taps): counts as Missed (US-07).
@@ -58,6 +62,7 @@ class CheckInActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_GOOD = "com.mfinatti.noclenchingsrs.action.ANSWER_GOOD"
         const val ACTION_BAD = "com.mfinatti.noclenchingsrs.action.ANSWER_BAD"
+        const val ACTION_SILENCE = "com.mfinatti.noclenchingsrs.action.SILENCE_RING"
         const val ACTION_DISMISSED = "com.mfinatti.noclenchingsrs.action.CHECK_IN_DISMISSED"
         const val EXTRA_CHECK_IN_AT = "check_in_at"
         private const val NO_CHECK_IN = -1L

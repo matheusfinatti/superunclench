@@ -16,6 +16,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.util.Log
 import android.widget.RemoteViews
 import androidx.annotation.ColorRes
 import androidx.core.app.NotificationCompat
@@ -26,6 +27,8 @@ import com.mfinatti.noclenchingsrs.R
 import com.mfinatti.noclenchingsrs.domain.srs.Answer
 import com.mfinatti.noclenchingsrs.feature.checkin.alarm.CheckInActionReceiver
 import com.mfinatti.noclenchingsrs.feature.checkin.domain.CheckInNotifier
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.RingNotifications
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.RingService
 import kotlin.time.Duration
 
 /**
@@ -113,8 +116,61 @@ class AndroidCheckInNotifier(context: Context) : CheckInNotifier {
             setContentDescription(R.id.notif_pill_bad, appContext.getString(R.string.answer_bad_a11y))
         }
 
+    /** Last ring shown in this process (to re-post the fallback notification as "Silenced"). */
+    @Volatile
+    private var lastRing: Pair<Long, Boolean>? = null
+
+    /**
+     * US-11 Ring: starts [RingService] (alarm sound + vibration + ringing notification with a
+     * full-screen intent). If the platform refuses a background foreground-service start, posts an
+     * insistent notification instead so the check-in still repeats until answered.
+     */
+    override fun showRing(checkInAtMillis: Long, level: Int, capAtMillis: Long, fullScreen: Boolean, silenced: Boolean) {
+        RingNotifications.ensureChannel(appContext)
+        manager.cancel(NOTIFICATION_ID)
+        lastRing = checkInAtMillis to fullScreen
+        try {
+            ContextCompat.startForegroundService(
+                appContext,
+                RingService.ringIntent(appContext, checkInAtMillis, fullScreen, silenced),
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Ring service refused; posting the ringing notification directly", e)
+            postRingFallback(checkInAtMillis, fullScreen, silenced)
+        }
+    }
+
+    override fun silenceRing() {
+        if (RingService.running) {
+            try {
+                appContext.startService(RingService.silenceIntent(appContext))
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Can't reach ring service", e)
+            }
+        }
+        lastRing?.let { (checkInAt, fullScreen) ->
+            // No service: the "silenced" ONLY_ALERT_ONCE update makes the system stop the sound.
+            postRingFallback(checkInAt, fullScreen, silenced = true)
+        }
+    }
+
+    @SuppressLint("MissingPermission") // Checked by canPost().
+    private fun postRingFallback(checkInAtMillis: Long, fullScreen: Boolean, silenced: Boolean) {
+        if (!canPost()) return
+        manager.notify(
+            RingNotifications.NOTIFICATION_ID,
+            RingNotifications.build(appContext, checkInAtMillis, fullScreen, silenced),
+        )
+    }
+
     override fun cancel() {
         manager.cancel(NOTIFICATION_ID)
+        // Stopping the service stops sound/vibration and removes its notification; the alarm
+        // screen closes itself when the session no longer has a ringing check-in.
+        appContext.stopService(Intent(appContext, RingService::class.java))
+        manager.cancel(RingNotifications.NOTIFICATION_ID)
+        lastRing = null
     }
 
     private fun canPost(): Boolean {
@@ -182,6 +238,7 @@ class AndroidCheckInNotifier(context: Context) : CheckInNotifier {
     }
 
     companion object {
+        private const val TAG = "CheckInNotifier"
         const val CHANNEL_ID = "checkins"
         const val NOTIFICATION_ID = 1001
         private const val REQUEST_OPEN_HOME = 10

@@ -1,11 +1,11 @@
 package com.mfinatti.noclenchingsrs.debugtools.qa
 
+import com.mfinatti.noclenchingsrs.domain.settings.AlertStyle
 import com.mfinatti.noclenchingsrs.domain.checkin.CheckInEvent
 import com.mfinatti.noclenchingsrs.domain.checkin.CheckInOutcome
 import com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource
 import com.mfinatti.noclenchingsrs.domain.session.SessionState
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
-import com.mfinatti.noclenchingsrs.domain.settings.QuietHoursPreset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,9 +70,10 @@ internal object QaFormat {
         else -> "until resumed"
     }
 
-    fun quietHours(enabled: Boolean, preset: QuietHoursPreset): String {
-        val range = "${hhmm(preset.startMinutes)}–${hhmm(preset.endMinutes)}"
-        return "${if (enabled) "ON" else "OFF"} $range · sim: OFF"
+    /** "ON 23:30–06:15 · sim: OFF" (24 h, minute precision). */
+    fun quietHours(enabled: Boolean, startMinutes: Int, endMinutes: Int, simulated: Boolean = false): String {
+        val range = quietRange(startMinutes, endMinutes)
+        return "${if (enabled) "ON" else "OFF"} $range · sim: ${if (simulated) "ON" else "OFF"}"
     }
 
     private fun letter(outcome: CheckInOutcome): String = when (outcome) {
@@ -91,6 +92,8 @@ internal object QaFormat {
         CheckInSource.PANEL -> "panel"
         CheckInSource.ALARM -> "replaced"
         CheckInSource.DISMISSED -> "dismissed"
+        CheckInSource.ALARM_SCREEN -> "alarm"
+        CheckInSource.TIMEOUT -> "timeout"
         CheckInSource.SEED -> "seed"
         CheckInSource.UNKNOWN -> "?"
     }
@@ -104,6 +107,21 @@ internal object QaFormat {
             "${clockTime(e.atMillis)} ${letter(e.outcome)} ${source(e.source).padEnd(9)} $from → $to"
         }
     }
+
+    /** "Ring · FSI: granted · ringing: yes (cap 10:52:07)" (US-11 §11). */
+    fun alert(style: AlertStyle, fullScreenAllowed: Boolean, session: SessionState): String {
+        val name = if (style == AlertStyle.RING) "Ring" else "Nudge"
+        val fsi = if (fullScreenAllowed) "granted" else "denied"
+        val cap = session.ringCapAtMillis
+        val ringing = when {
+            !session.ringActive || cap == null -> "no"
+            session.ringSilenced -> "silenced (cap ${clockTime(cap)})"
+            else -> "yes (cap ${clockTime(cap)})"
+        }
+        return "$name · FSI: $fsi · ringing: $ringing"
+    }
+
+    fun quietRange(startMinutes: Int, endMinutes: Int): String = "${hhmm(startMinutes)}–${hhmm(endMinutes)}"
 
     private fun hhmm(minutesOfDay: Int): String =
         String.format(Locale.US, "%02d:%02d", minutesOfDay / 60, minutesOfDay % 60)

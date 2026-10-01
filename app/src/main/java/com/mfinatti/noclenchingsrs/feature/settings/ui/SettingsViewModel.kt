@@ -3,6 +3,7 @@ package com.mfinatti.noclenchingsrs.feature.settings.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mfinatti.noclenchingsrs.data.settings.SettingsRepository
+import com.mfinatti.noclenchingsrs.domain.settings.AlertStyle
 import com.mfinatti.noclenchingsrs.domain.settings.ThemeMode
 import com.mfinatti.noclenchingsrs.domain.settings.UserSettings
 import com.mfinatti.noclenchingsrs.feature.checkin.domain.CheckInController
@@ -30,6 +31,26 @@ class SettingsViewModel(
 
     fun onThemeChange(mode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
+    }
+
+    /** US-11: applies to the next check-in; a ring in progress keeps ringing until answered (AC12). */
+    fun onAlertStyle(style: AlertStyle) {
+        viewModelScope.launch { settingsRepository.setAlertStyle(style) }
+    }
+
+    /** Quiet hours changes re-evaluate a running session's next alarm immediately (US-10 AC7). */
+    fun onQuietHoursEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            checkInController.quietHoursChanged { settingsRepository.setQuietHoursEnabled(enabled) }
+        }
+    }
+
+    /** Start/end from the time pickers; the picker never lets them be equal. */
+    fun onQuietHoursRange(startMinutes: Int, endMinutes: Int) {
+        if (startMinutes == endMinutes) return
+        viewModelScope.launch {
+            checkInController.quietHoursChanged { settingsRepository.setQuietHoursRange(startMinutes, endMinutes) }
+        }
     }
 
     /** L1 0/3, history kept; a running session continues at the L1 interval from now. */

@@ -56,10 +56,11 @@ Total Goods from L1 to L8 with no Bads: 28.
 - **Reset progress** (Settings, with confirmation dialog): back to L1/0; history kept.
 
 ### Quiet hours (Should — US-10)
-- Default **ON, 22:00–07:00** (preset choices, see US-10). An alarm due inside quiet hours is deferred to quiet-hours end. No alarm, no Missed. Level kept.
+- Default **ON, 22:00–07:00**. The user picks any start and end with time pickers, and overnight ranges are allowed (see US-10). An alarm due inside quiet hours is deferred to quiet-hours end. No alarm, no Missed. Level kept.
 
 ### Alarm notification
 - Regular high-importance notification (channel "Check-ins"): sound + vibration, heads-up, **not full-screen**.
+- **Alert style** (US-11): **Nudge** (default; one sound and buzz, never full-screen) or **Ring**, an opt-in real alarm: a full-screen alarm screen when locked, a ringing heads-up when in use, alarm stream, rings until Good/Bad, 10 min auto-silence cap → Missed. Quiet hours always win.
 - Title: "Check-in: jaw relaxed?" · Actions: **Good** (green) · **Bad** (red). Tapping the body opens the app to Home, which shows the pending check-in card with the same two buttons.
 
 ## 3. Backlog (ordered)
@@ -167,7 +168,7 @@ As a user, I want check-ins to arrive on time even when my phone is idle or rest
 ---
 
 ### US-06 — Next-alarm countdown, Pause & Resume
-**Status: TODO** · **Priority: Must**
+**Status: DONE** · **Priority: Must**
 
 As a user, I want to see when the next check-in is and pause for a meeting, so that I stay in control.
 
@@ -184,7 +185,7 @@ As a user, I want to see when the next check-in is and pause for a meeting, so t
 ---
 
 ### US-07 — Missed check-ins & auto-pause
-**Status: TODO** · **Priority: Should**
+**Status: DONE** · **Priority: Should**
 
 As a user, I want unanswered check-ins not to punish me, and the app to stop nagging if I'm away, so that it stays respectful.
 
@@ -201,7 +202,7 @@ As a user, I want unanswered check-ins not to punish me, and the app to stop nag
 ---
 
 ### US-08 — Stats: Good/Bad charts with time frames
-**Status: TODO** · **Priority: Must**
+**Status: DONE** · **Priority: Must**
 
 As a user, I want to see my Good vs Bad answers over time, so that I can notice patterns and feel progress.
 
@@ -222,7 +223,7 @@ As a user, I want to see my Good vs Bad answers over time, so that I can notice 
 ---
 
 ### US-09 — Settings: name, theme, reset
-**Status: TODO** · **Priority: Should**
+**Status: DONE** · **Priority: Should**
 
 As a user, I want to set my name and appearance, so that the app feels like mine.
 
@@ -239,24 +240,125 @@ As a user, I want to set my name and appearance, so that the app feels like mine
 ---
 
 ### US-10 — Quiet hours
-**Status: TODO** · **Priority: Should**
+**Status: DONE** · **Priority: Should**
 
-As a user, I want no check-ins at night, so that the app never wakes me up.
+> **Reopened: founder change request (2026-10-01).** The preset version passed QA 4/4 (`docs/qa/US-10/report.md`). Founder wants a free start/end range picked with time pickers, like an alarm app, instead of presets. ACs 3–6 below are unchanged from the passed version and only need a regression check. ACs 1, 2 and 7 are new or changed.
+
+As a user, I want to choose when check-ins stop for the night, so that the app never wakes me up and fits my own schedule.
 
 **Acceptance criteria**
-- Given Settings, Then **Quiet hours** shows a switch (default ON) and a preset selector: **22:00–07:00**, **23:00–08:00**, **21:00–06:00**.
-- Given quiet hours active (QA: debug **Simulate quiet hours now**), When an alarm becomes due, Then no notification fires, nothing is recorded as Missed, and Home shows "Quiet hours — next check-in at 07:00".
-- Given quiet hours end, Then the next check-in is scheduled at the end time and the level is unchanged.
-- Given the switch is OFF, Then alarms fire at any time.
+1. *(changed)* Given Settings → Check-ins, Then **Quiet hours** shows a switch (default **ON**) and two rows, **Starts** and **Ends**, showing the current times (default **22:00** and **07:00**). The preset radio list is gone.
+2. *(new)* Given I tap **Starts** (or **Ends**), Then an M3 **time picker** dialog opens pre-set to the current value. It has a dial, a keyboard-input toggle, **Cancel** and **OK**.
+   - **OK** saves the value, updates the row and shows a snackbar "Quiet hours 11:30 PM – 6:15 AM".
+   - **Cancel** changes nothing.
+   - Any minute can be chosen.
+   - The picker and every displayed time follow the device's **12/24 h** setting: "10:00 PM" vs "22:00". Accessibility labels always speak the time unambiguously.
+3. *(new)* **Overnight and same-day ranges.**
+   - Given start > end (e.g. 23:30 → 06:15), Then the window spans midnight (23:30–24:00 and 00:00–06:15).
+   - Given start < end (e.g. 13:00 → 14:00), Then it is a same-day window.
+   - Both work, and the readout shows the window, e.g. `ON 23:30–06:15`.
+4. *(new)* **Start == end is not allowed.** Given I pick an end time equal to the start (or the reverse), Then the picker stays open with the error "Start and end can't be the same", OK is disabled, and the saved range doesn't change.
+5. *(unchanged)* Given quiet hours active (QA: real clock time inside the window, or **Simulate quiet hours now**), When an alarm becomes due, Then no notification fires, nothing is recorded as Missed, and Home shows "Quiet hours — next check-in at <end time>".
+6. *(unchanged)* Given quiet hours end, Then the next check-in fires at the end time and the level is unchanged. *(unchanged)* Given the switch is OFF, Then alarms fire at any time and the Starts/Ends rows are disabled but still show their values.
+7. *(new)* **Editing the range while running.** Given a session is running and I change the range:
+   - If **now** is inside the new window, Then the next check-in is deferred to the new end time.
+   - If an alarm was deferred and **now** is no longer inside the window, Then the next check-in is **now + current interval**, as on Resume.
+   - The readout's Next alarm updates immediately.
+   - QA: set the system time with adb, or set a window around the current time.
+8. *(unchanged, already passing)* Given I tap Start while inside quiet hours, Then the snackbar "Started. First check-in at <end>, after quiet hours." appears.
+
+**Notes**
+- Quiet-hours times are wall-clock times and are **never scaled** by Short intervals.
+- No limit on window length, but the start must differ from the end. A window of 23 h 59 min is allowed.
+- Design: replace §2 of `docs/design/US-10-quiet-hours.md` (Starts/Ends rows plus the picker dialog). Eng: keep the Simulate toggle.
+- QA can now type and set the clock via adb (`cmd alarm set-time` / `date`) to test real windows, including one that crosses midnight.
+
+---
+
+### US-11 — Alert style: Nudge vs Ring
+**Status: TODO** · **Priority: Should**
+
+> Revised 2026-10-01 per founder: **"If it's a proper ring alarm, it's fine to be full screen."** Ring is now a **real alarm**. This is a deliberate, opt-in exception to the "not full-screen" brief, which still applies to Nudge.
+
+As a user who misses a single beep, I want to choose between a gentle **nudge** and a **proper alarm that rings until I answer**, so that I actually do the check-in when I need to.
+
+**Product rules**
+- **Nudge** *(default, unchanged)*: one sound plus one buzz, heads-up notification with Good/Bad. It is the default because Ring is louder and needs extra permissions, so it should be a conscious choice in Settings.
+- **Ring** = a real alarm:
+  - **Screen off or locked** → a **full-screen alarm screen** that turns the screen on and shows over the lock screen, with **no unlock needed** to answer. It shows "Check-in: jaw relaxed?", the time and level, a large green **Good** ("I was relaxed") and a large red **Bad** ("I was clenching").
+  - **Phone unlocked and in use** → Android shows a **heads-up** instead of taking over the screen. It is ongoing (can't be swiped away) and has Good/Bad. Tapping its body opens the alarm screen.
+  - **Audio:** plays on the **alarm stream** with repeating vibration, at the user's **alarm volume**. It **rings even in silent or vibrate mode**, like an alarm clock. **DND:** it is posted as `CATEGORY_ALARM`, so it rings when the user's DND allows alarms (the Android default) and stays silent if they have blocked alarms. We don't request DND access.
+  - **Keeps ringing until Good or Bad is tapped**, from the alarm screen, the notification or the in-app card. Opening the app doesn't stop it.
+  - **Volume or power key** = **silence**: sound and vibration stop, but the alarm screen and notification stay until answered. Same as alarm-clock apps.
+  - **Safety auto-silence cap: 10 min.** If the alarm is still unanswered, it stops ringing, closes the alarm screen, removes the notification and records **Missed** (`M timeout`). The user opted into Ring, so an alarm that rang for 10 minutes unanswered is a fair Missed. The **next alarm is scheduled from the time of the miss** at the current interval.
+  - **While ringing, no new alarm is scheduled.** The next one is scheduled when the ring resolves (answer, timeout, Stop or Pause), so a Ring alarm is never "replaced", even when the interval is shorter than 10 min.
+  - **Auto-pause** (US-07) still applies: **3 consecutive timeouts** auto-pause the session. Worst case is about 30 min of unattended ringing in total, then silence.
+  - **Stop / Pause** from the app stops ringing and removes the notification.
+- **Quiet hours always win:** Ring never fires inside quiet hours. A check-in deferred to the end of quiet hours rings normally.
+- **Channels:** Ring uses a **separate channel**, "Check-in alarms" (importance HIGH, alarm audio attributes, its own sound and vibration), because a channel's sound and usage can't change after it is created. Nudge keeps "Check-ins".
+- **Permissions (Ring only):**
+  - **Full-screen (Android 14+):** `USE_FULL_SCREEN_INTENT` is limited to alarm and calling apps, and the user can revoke it. If Ring is selected and `canUseFullScreenIntent()` is false, Settings and Home show a banner: "Ring can't show full screen" + **Allow full screen**, which opens the system "full screen notifications" page for the app. **Fallback:** a ringing, ongoing heads-up notification on the alarm stream. It still rings until answered or capped. Android ≤13 grants it at install.
+  - **Exact alarms matter more for Ring.** When Ring is selected and exact alarms aren't allowed, the US-05 exact-timing banner also shows under Alert style in Settings.
+  - **Release risk (Eng/PM):** the Play Console asks apps that declare `USE_FULL_SCREEN_INTENT` to justify it. Our case is a user-chosen alarm. If Play refuses, we ship the fallback, ringing heads-up only.
+- **Implementation guidance** (Eng to estimate):
+  - Use a high-priority notification with `setFullScreenIntent` and `CATEGORY_ALARM`.
+  - The alarm activity uses `setShowWhenLocked` / `setTurnScreenOn`.
+  - Audio through the alarm channel with `FLAG_INSISTENT`, or a short-lived foreground service with alarm `AudioAttributes`. Pick the lowest-risk option for Android 14+ foreground-service-type rules and explain why.
+  - The cap is enforced with an exact alarm.
+
+**Acceptance criteria** (adb bridge: `dumpsys notification`, `dumpsys audio`, `dumpsys activity activities`, `input keyevent KEYCODE_POWER` / `KEYCODE_VOLUME_DOWN`, `cmd audio set-ringer-mode`, `cmd notification set_dnd`, `appops`)
+1. **Setting.** Given Settings → Check-ins, Then **Alert style** offers **Nudge** (default) and **Ring**, with descriptions "One sound and buzz" and "Rings like an alarm until you answer". It persists across relaunch and reboot, and the readout shows `Alert: Nudge|Ring`.
+2. **Nudge unchanged.** Given Nudge, a check-in posts on `checkins`, with no full-screen intent and no insistent or alarm usage. US-03 behaviour holds.
+3. **Ring, locked.** Given Ring, full-screen permission granted and the screen locked (`KEYCODE_POWER`), When a check-in fires, Then:
+   - the screen turns on;
+   - the **alarm screen is on top** (`dumpsys activity activities` shows the alarm activity resumed) over the lock screen;
+   - Good/Bad are tappable without unlocking;
+   - `dumpsys audio` shows an active playback with **USAGE_ALARM**;
+   - the notification record has a full-screen intent and category `alarm` on the ring channel.
+4. **Ring, in use.** Given Ring and the phone unlocked on another app, When a check-in fires, Then a ringing **heads-up** with Good/Bad appears (the alarm screen does **not** take over), the record is ongoing (`FLAG_ONGOING_EVENT`), and tapping the body opens the alarm screen.
+5. **Answer stops it.** Given ringing, When I tap Good (or Bad) on the alarm screen, the notification or the in-app card, Then:
+   - playback stops within 1 s;
+   - the alarm screen closes, after briefly showing the answer confirmation;
+   - the notification is removed;
+   - the answer is recorded with source `alarm|notif|card`;
+   - the level updates per US-04;
+   - the next alarm = answer + interval.
+6. **Silent, vibrate, DND, silence key.**
+   - With the ringer **silent** or **vibrate**, Ring still plays sound (alarm stream) and vibrates.
+   - With **DND on and alarms allowed** (default), it rings. With DND set to block alarms, it doesn't sound but the alarm screen or notification still appears.
+   - Pressing **volume down** while ringing stops the sound and vibration, but the alarm screen and notification remain and the check-in stays pending.
+7. **Auto-silence cap.** Given ringing and no answer, Then after **10 min** (debug **Short ring cap** = 15 s):
+   - ringing stops, the alarm screen closes and the notification is removed;
+   - history records `M timeout`, with no level change;
+   - the next alarm = miss time + current interval;
+   - no other alarm fired while it was ringing, even with Short intervals ON.
+   - After **3 consecutive timeouts**, the session **auto-pauses** (US-07 banner).
+8. **Stop / Pause.** Given ringing, When I tap Stop or Pause in the app, Then ringing stops, the alarm screen closes, the notification is removed, and nothing is recorded as Missed.
+9. **Full-screen permission denied (Android 14+).** Given Ring and the permission revoked (`appops set <pkg> USE_FULL_SCREEN_INTENT deny`), Then:
+   - Settings and Home show "Ring can't show full screen" + **Allow full screen**, which opens the system page for the app;
+   - a check-in fires as a **ringing ongoing heads-up** on the alarm stream (no full-screen intent in the record) and still follows AC5–AC8.
+   - After the permission is granted again, the banner disappears.
+10. **Exact alarms.** Given Ring and exact alarms denied, Then the exact-timing banner also shows under Alert style in Settings.
+11. **Quiet hours win.** Given Ring and quiet hours active, When an alarm is due, Then no alarm screen, notification or playback happens, and nothing is Missed. At quiet-hours end it rings.
+12. **Switching style.** Changing Nudge ↔ Ring affects the **next** check-in only. Switching to Nudge while a Ring is ringing doesn't stop it; answering does.
+13. **Debug panel.** The panel adds:
+    - the **Alert style** toggle;
+    - **Short ring cap (15 s)**;
+    - **Preview: full-screen denied**;
+    - readout `Alert: Ring · FSI: granted|denied · ringing: yes (cap 10:52:07)`.
+    - Every action shows a snackbar.
 
 **Notes / open questions**
-- Custom start/end via M3 time picker is **Could** (dial picker is tappable) — later.
-- PM open question: should Start during quiet hours warn the user? Proposed: yes, one-line notice.
+- The cap is **not** scaled by Short intervals (1 min = 1 s). QA uses Short ring cap.
+- Copy on the alarm screen stays non-medical and kind ("Quick check: is your jaw relaxed?").
+- **Could:** offer "Nudge or Ring?" as an optional step after the first Start, and a per-level choice (e.g. Ring only at L5+, where intervals are long). Not v1.
+- Design: alarm-screen layout (both themes, large touch targets of at least 96dp, no accidental answers from a pocket swipe), the ring channel sound (pleasant, loopable), and the banners.
+- Eng: effort and risk estimate, covering FGS type on Android 14+, Play full-screen-intent declaration, OEM behaviour and the battery impact of an exact-alarm cap timer.
 
 ---
 
 ### Later / Won't (v1)
-- **Could:** interval jitter (±10%) to reduce predictability; custom quiet-hour times; home-screen widget; per-level names/badges; Wear OS.
+- **Could:** interval jitter (±10%) to reduce predictability; "Nudge or Ring?" step after first Start; Ring only at higher levels; home-screen widget; per-level names/badges; Wear OS.
 - **Won't:** medical content, sleep/night bruxism detection, account/cloud sync.
 
 ## 4. Definition of Done (per story)
@@ -292,3 +394,22 @@ As a user, I want no check-ins at night, so that the app never wakes me up.
 | 2026-09-30 | Debug **Auto-pause ON/OFF** toggle | Approved, debug only, default ON. | Hands-free QA at seconds scale. |
 | 2026-09-30 | US-04 O1 | **Closed.** Real Good event found in history, most likely a heads-up tap. Source tracking now covers future cases. | — |
 | 2026-09-30 | QA panel scrolling (US-05 B1b) | Must be fixed **before US-06 QA**, with jump chips or Kill app moved into Session & alarms. | Tap-only QA can't scroll. |
+| 2026-10-01 | **Answering while paused** (US-06 design Q) | Confirmed: the answer updates level and history, and **no new alarm** is scheduled until resume. | A pause means no alarms. |
+| 2026-10-01 | Countdown a11y label granularity (US-06) | Minutes-only ("in 2 minutes, at 9:38 AM"), with seconds under 1 min. Accepted. | The label updates at most every 60 s. |
+| 2026-10-01 | Pending-card hint "Missed the last one — that's fine." (US-07) | Approved. | Reassures without guilt. |
+| 2026-10-01 | US-05 gated must-fixes | B1b, O2a and O3 are **all closed** (see US-06/US-07 sign-offs). US-04 O1 condition satisfied, so US-04 does not reopen. | — |
+| 2026-10-01 | QA tooling | QA now runs through an adb bridge (real swipes, typing, reboots, `dumpsys`). Tap-only limits from §3 no longer apply, but the debug panel stays the primary way to speed up time. | — |
+| 2026-10-01 | **Stats a11y bar offset** (US-08 B1) | Must be fixed **before v1 release** (all frames, with a test). Not blocking US-08. | Screen-reader users would get the wrong hour's numbers. |
+| 2026-10-01 | Chart a11y summary (US-08) | "Highest" becomes **"Busiest"**: the most answers (Good + Bad), ties going to the most recent. | Clearer. |
+| 2026-10-01 | Seed "today" events (US-08) | The seed shifts today's events so the last is at or before now, with the same counts. | No future-dated rows; screenshots stay comparable. |
+| 2026-10-01 | Name length (US-09) | Max 24 characters. | Fits the greeting on compact widths. |
+| 2026-10-01 | **Reset progress while running** (US-09) | The session keeps running at L1, and the next alarm is set from the reset time at the L1 interval. | Reset is about progress, not the session. |
+| 2026-10-01 | US-03 B1 white launch flash | **Closed**, verified in US-09 with a cold-start recording. | — |
+| 2026-10-01 | **US-10 reopened** (founder change request) | Presets are replaced by **Starts/Ends time pickers**. Default 22:00–07:00. Overnight and same-day ranges both work. Start == end is blocked in the picker. Times follow the device's 12/24 h setting. Editing the range while running re-evaluates the next alarm immediately. The passed ACs (deferral, no Missed, switch OFF, Start notice) carry over as regression checks. | Founder: "like a regular alarm app". |
+| 2026-10-01 | **US-11 Alert style: Nudge vs Ring** (new, Should) | Ring repeats sound and vibration until answered, the app is opened, it is dismissed, the session is stopped or paused, or **60 s** pass. After the timeout the check-in stays pending silently, so the timeout is **not** a miss and US-07 rules are unchanged. **Notification stream, not the alarm stream:** respects silent, vibrate and **DND** (no bypass). Never full-screen. A separate "Check-ins (ring)" channel. Quiet hours always win. The ring timeout is not scaled in short-intervals mode; QA uses a debug 10 s timeout. "Choose at first Start" is a Could. | Founder feedback that a single nudge can be missed. Kept within the original brief (no full-screen, not an alarm clock) and Play policy. |
+| 2026-10-01 | **US-08 B1** (a11y bar offset) | **Still partially open:** screen-reader boxes are offset on the **Today and 30-day** views. **Must be fixed before v1 release.** | Wrong data for screen-reader users. |
+| 2026-10-01 | **US-11 revised: Ring = real alarm** (founder: "fine to be full screen") | **Supersedes the earlier US-11 row.** Ring is an opt-in alarm:<br>• **Full-screen alarm screen** when locked or with the screen off (no unlock needed to answer); a **ringing ongoing heads-up** when the phone is in use.<br>• Plays on the **alarm stream**, so it rings through silent and vibrate mode. **DND:** `CATEGORY_ALARM`, so it follows the user's DND alarm setting (no bypass request).<br>• Rings until **Good or Bad**. Volume or power key silences it but leaves it pending.<br>• **10 min auto-silence cap → Missed (`M timeout`).** Next alarm from the miss time. No new alarm is scheduled while ringing. 3 timeouts → auto-pause.<br>• **Android 14+ full-screen permission:** if denied, a banner plus fallback to a ringing heads-up. The exact-alarm banner is also shown under Ring.<br>• Quiet hours win. Debug **Short ring cap 15 s**, not scaled by short intervals.<br>• Nudge stays the **default**; Ring is chosen in Settings. | Founder wants a real "ring until I press". Nudge stays the gentle default. The cap and auto-pause stop endless ringing when the user is away. **Release risk:** Play Console full-screen-intent declaration (fallback ready). |
+| 2026-10-01 | Brief exception | "Not full-screen" from §1/§2 now applies to **Nudge only**. Ring is the explicit, opt-in exception. | Founder decision. |
+| 2026-10-01 | **US-10 edit-while-running edge case** | If now is inside the edited window but the next check-in is already scheduled after the window end, **keep the later time**: `next = max(scheduled, window end)`. | Quiet hours only defer and never bring a check-in sooner than the interval. |
+| 2026-10-01 | **US-08 B1 CLOSED** (a11y bar offset) | Fixed in **all 3 frames** (re-check #2): node bounds tile the plot to within ±1 px, taps select their own bar, and the Today readout fits on one line. The v1 release gate is cleared. Note: per-bar nodes are now narrower than 48dp on Today and 30d. Accepted, because ‹ › stepping and the chart summary give an accessible alternative. | — |
+| 2026-10-01 | US-10 v2 | **Accepted** 8/8 (`docs/qa/US-10/signoff-pm-v2.md`). | — |

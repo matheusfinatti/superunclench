@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.mfinatti.noclenchingsrs.data.setOrRemove
 import com.mfinatti.noclenchingsrs.data.toEnumOrDefault
+import com.mfinatti.noclenchingsrs.domain.checkin.CheckInSource
 import com.mfinatti.noclenchingsrs.domain.session.LastAnswer
 import com.mfinatti.noclenchingsrs.domain.session.SessionState
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
@@ -68,6 +69,8 @@ class SessionRepository(
             autoPaused = this[Keys.AUTO_PAUSED] ?: defaults.autoPaused,
             lastAnswer = readLastAnswer(),
             exactTimingBannerDismissed = this[Keys.EXACT_BANNER_DISMISSED] ?: false,
+            ringCapAtMillis = this[Keys.RING_CAP_AT],
+            ringSilenced = this[Keys.RING_SILENCED] ?: false,
         )
     }
 
@@ -77,7 +80,8 @@ class SessionRepository(
             ?: return null
         val change = this[Keys.LAST_CHANGE]?.let { name -> LevelChange.entries.firstOrNull { it.name == name } }
             ?: return null
-        return LastAnswer(atMillis = at, answer = answer, change = change)
+        val source = this[Keys.LAST_SOURCE].toEnumOrDefault(CheckInSource.UNKNOWN)
+        return LastAnswer(atMillis = at, answer = answer, change = change, source = source)
     }
 
     private fun MutablePreferences.write(state: SessionState) {
@@ -92,7 +96,10 @@ class SessionRepository(
         setOrRemove(Keys.LAST_ANSWER_AT, state.lastAnswer?.atMillis)
         setOrRemove(Keys.LAST_ANSWER, state.lastAnswer?.answer?.name)
         setOrRemove(Keys.LAST_CHANGE, state.lastAnswer?.change?.name)
+        setOrRemove(Keys.LAST_SOURCE, state.lastAnswer?.source?.name)
         setOrRemove(Keys.EXACT_BANNER_DISMISSED, state.exactTimingBannerDismissed)
+        setOrRemove(Keys.RING_CAP_AT, state.ringCapAtMillis)
+        setOrRemove(Keys.RING_SILENCED, state.ringSilenced)
     }
 
     private object Keys {
@@ -107,6 +114,9 @@ class SessionRepository(
         val LAST_ANSWER_AT = longPreferencesKey("last_answer_at")
         val LAST_ANSWER = stringPreferencesKey("last_answer")
         val LAST_CHANGE = stringPreferencesKey("last_change")
+        val LAST_SOURCE = stringPreferencesKey("last_answer_source")
         val EXACT_BANNER_DISMISSED = booleanPreferencesKey("exact_banner_dismissed")
+        val RING_CAP_AT = longPreferencesKey("ring_cap_at")
+        val RING_SILENCED = booleanPreferencesKey("ring_silenced")
     }
 }

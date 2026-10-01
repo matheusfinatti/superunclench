@@ -29,7 +29,22 @@ data class SessionState(
     val lastAnswer: LastAnswer? = null,
     /** "Not now" on the exact-timing banner; reset on every Start (US-05 §2). */
     val exactTimingBannerDismissed: Boolean = false,
-)
+    /**
+     * US-11 Ring: auto-silence cap of the pending check-in while it rings (or was silenced); null
+     * for Nudge check-ins. While set, the only scheduled alarm is the cap ([nextAlarmAtMillis]).
+     */
+    val ringCapAtMillis: Long? = null,
+    /** US-11: the ring was silenced (Silence, volume or power key); still pending until answered. */
+    val ringSilenced: Boolean = false,
+) {
+    /** A Ring check-in is pending (ringing or silenced) and not yet resolved. */
+    val ringActive: Boolean
+        get() = ringCapAtMillis != null && pendingCheckInAtMillis != null
+
+    /** Sound/vibration should be playing right now. */
+    val ringing: Boolean
+        get() = ringActive && !ringSilenced
+}
 
 /**
  * The most recent Good/Bad answer and what it did, so Home can show level feedback for answers
@@ -39,6 +54,7 @@ data class LastAnswer(
     val atMillis: Long,
     val answer: Answer,
     val change: LevelChange,
+    val source: CheckInSource = CheckInSource.UNKNOWN,
 )
 
 /** Result of a session transition: the new state plus an optional history event to record. */
@@ -89,6 +105,8 @@ class SessionEngine(
     ): SessionState {
         if (state.status == SessionStatus.PAUSED) return onPauseEnded(state, nowMillis, scale)
         if (state.status != SessionStatus.RUNNING) return state
+        // A Ring check-in keeps its cap alarm; a cap already passed fires (and times out) at once.
+        if (state.ringActive) return state
         val next = state.nextAlarmAtMillis
         if (next != null && next > nowMillis) return state
         return state.copy(nextAlarmAtMillis = nextAlarmAt(nowMillis, state.srs.level, scale))
@@ -125,6 +143,8 @@ class SessionEngine(
         scale: IntervalScale = IntervalScale.Real,
     ): SessionState {
         if (state.status != SessionStatus.RUNNING) return state
+        // While a Ring check-in is unresolved no new check-in is scheduled (US-11 AC7).
+        if (state.ringActive) return state
         return state.copy(nextAlarmAtMillis = nextAlarmAt(nowMillis, state.srs.level, scale))
     }
 
@@ -139,9 +159,15 @@ class SessionEngine(
         consecutiveMisses = 0,
         pausedUntilMillis = null,
         autoPaused = false,
+        ringCapAtMillis = null,
+        ringSilenced = false,
     )
 
-    /** Pauses a running session. [untilMillis] null = "Until I resume". */
+    /**
+     * Pauses a running session. [untilMillis] null = "Until I resume". A pending Nudge check-in
+     * stays answerable; a Ring check-in is ended without a Missed (US-11 AC8: ring stops, the alarm
+     * screen and notification go away, nothing recorded).
+     */
     fun pause(state: SessionState, untilMillis: Long?): SessionState {
         if (state.status != SessionStatus.RUNNING) return state
         return state.copy(
@@ -149,6 +175,9 @@ class SessionEngine(
             nextAlarmAtMillis = null,
             pausedUntilMillis = untilMillis,
             autoPaused = false,
+            pendingCheckInAtMillis = if (state.ringActive) null else state.pendingCheckInAtMillis,
+            ringCapAtMillis = null,
+            ringSilenced = false,
         )
     }
 
@@ -177,6 +206,7 @@ class SessionEngine(
         nowMillis: Long,
         scale: IntervalScale = IntervalScale.Real,
         autoPause: Boolean = true,
+        ringCapMillis: Long? = null,
     ): SessionTransition {
         if (state.status != SessionStatus.RUNNING) return SessionTransition(state)
         var missEvent: CheckInEvent? = null
@@ -187,10 +217,26 @@ class SessionEngine(
             current = missed.state
             if (current.status != SessionStatus.RUNNING) return missed
         }
+        if (ringCapMillis != null) {
+            // Ring (US-11): the only alarm is the auto-silence cap; the next check-in is scheduled
+            // when the ring resolves (answer, cap, Stop, Pause).
+            val cap = nowMillis + ringCapMillis
+            return SessionTransition(
+                state = current.copy(
+                    pendingCheckInAtMillis = nowMillis,
+                    nextAlarmAtMillis = cap,
+                    ringCapAtMillis = cap,
+                    ringSilenced = false,
+                ),
+                event = missEvent,
+            )
+        }
         return SessionTransition(
             state = current.copy(
                 pendingCheckInAtMillis = nowMillis,
                 nextAlarmAtMillis = nextAlarmAt(nowMillis, current.srs.level, scale),
+                ringCapAtMillis = null,
+                ringSilenced = false,
             ),
             event = missEvent,
         )
@@ -230,7 +276,9 @@ class SessionEngine(
                 pendingCheckInAtMillis = null,
                 consecutiveMisses = 0,
                 nextAlarmAtMillis = next,
-                lastAnswer = LastAnswer(atMillis = nowMillis, answer = answer, change = result.change),
+                ringCapAtMillis = null,
+                ringSilenced = false,
+                lastAnswer = LastAnswer(atMillis = nowMillis, answer = answer, change = result.change, source = source),
             ),
             event = event,
             levelChange = result.change,
@@ -258,7 +306,12 @@ class SessionEngine(
             source = source,
         )
         val misses = state.consecutiveMisses + 1
-        val base = state.copy(pendingCheckInAtMillis = null, consecutiveMisses = misses)
+        val base = state.copy(
+            pendingCheckInAtMillis = null,
+            consecutiveMisses = misses,
+            ringCapAtMillis = null,
+            ringSilenced = false,
+        )
         val newState = when {
             state.status != SessionStatus.RUNNING -> base
             autoPause && misses >= autoPauseAfterMisses -> base.copy(
@@ -272,6 +325,10 @@ class SessionEngine(
         }
         return SessionTransition(state = newState, event = event, levelChange = LevelChange.UNCHANGED)
     }
+
+    /** US-11: Silence (button, volume or power key). The check-in stays pending until answered or capped. */
+    fun silenceRing(state: SessionState): SessionState =
+        if (state.ringing) state.copy(ringSilenced = true) else state
 
     /** Settings "Reset progress": back to L1/0, everything else kept. */
     fun resetProgress(state: SessionState): SessionState = state.copy(srs = SrsState(), lastAnswer = null)

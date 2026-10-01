@@ -88,6 +88,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mfinatti.noclenchingsrs.R
+import androidx.compose.material3.TextButton
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.RingSettingsLinks
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.FullScreenStatus
+import com.mfinatti.noclenchingsrs.feature.checkin.ring.FullScreenDeniedBanner
 import com.mfinatti.noclenchingsrs.di.LocalAppContainer
 import com.mfinatti.noclenchingsrs.domain.session.SessionStatus
 import com.mfinatti.noclenchingsrs.domain.srs.Answer
@@ -121,6 +125,8 @@ object HomeTestTags {
     const val TODAY_ROW = "home_today_row"
     const val NOTIF_OFF_BANNER = "banner_notif_off"
     const val NOTIF_OFF_SETTINGS = "banner_notif_off_settings"
+    const val PENDING_RINGING_OVERLINE = "pending_ringing_overline"
+    const val PENDING_SILENCE = "pending_silence"
     const val EXACT_BANNER = "banner_exact"
     const val EXACT_ALLOW = "banner_exact_allow"
     const val EXACT_NOT_NOW = "banner_exact_not_now"
@@ -154,18 +160,32 @@ fun HomeRoute(onOpenStats: () -> Unit = {}) {
     // Re-checked on every resume (e.g. returning from system notification settings).
     var canDeliver by remember { mutableStateOf(NotificationStatus.canDeliverCheckIns(context)) }
     var canScheduleExact by remember { mutableStateOf(container.alarmScheduler.canScheduleExactAlarms()) }
+    var canUseFullScreen by remember { mutableStateOf(FullScreenStatus.canUseFullScreenIntent(context)) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        canUseFullScreen = FullScreenStatus.canUseFullScreenIntent(context)
         canDeliver = NotificationStatus.canDeliverCheckIns(context)
         canScheduleExact = container.alarmScheduler.canScheduleExactAlarms()
     }
 
     var rationaleMode by rememberSaveable { mutableStateOf<RationaleMode?>(null) }
+    // Start; when starting inside quiet hours, say when the first check-in will come (US-10 §3.2).
+    fun startSession() {
+        scope.launch {
+            val started = viewModel.start()
+            val next = started.nextAlarmAtMillis
+            if (uiState?.quiet?.isActive(System.currentTimeMillis()) == true && next != null) {
+                val time = android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date(next))
+                snackbarHostState.currentSnackbarData?.dismiss()
+                snackbarHostState.showSnackbar(resources.getString(R.string.quiet_start_snackbar, time))
+            }
+        }
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         canDeliver = NotificationStatus.canDeliverCheckIns(context)
         // Allow -> the session starts. Don't allow -> stays stopped; the banner explains why.
-        if (granted) viewModel.onStart()
+        if (granted) startSession()
     }
 
     val openNotificationSettings: () -> Unit = {
@@ -207,7 +227,7 @@ fun HomeRoute(onOpenStats: () -> Unit = {}) {
             val blocked = !granted && current.notificationPermissionRequested && !systemWillAsk
             rationaleMode = if (blocked) RationaleMode.BLOCKED else RationaleMode.ASK
         } else {
-            viewModel.onStart()
+            startSession()
         }
     }
 
@@ -271,6 +291,9 @@ fun HomeRoute(onOpenStats: () -> Unit = {}) {
             requiresRuntimePermission = NotificationStatus.requiresRuntimePermission,
         ) ?: false,
         showExactTimingBanner = state?.showExactTimingBanner(canScheduleExact) ?: false,
+        showFullScreenBanner = state?.showFullScreenBanner(canUseFullScreen) ?: false,
+        onAllowFullScreen = { RingSettingsLinks.openFullScreenSettings(context) },
+        onSilenceRing = viewModel::onSilenceRing,
         notificationsBlocked = !canDeliver || state?.previewNotificationsOff == true,
         onAllowExactTiming = openExactAlarmSettings,
         onDismissExactTiming = viewModel::onDismissExactTimingBanner,
@@ -327,6 +350,9 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     showNotificationsOffBanner: Boolean = false,
     showExactTimingBanner: Boolean = false,
+    showFullScreenBanner: Boolean = false,
+    onAllowFullScreen: () -> Unit = {},
+    onSilenceRing: () -> Unit = {},
     notificationsBlocked: Boolean = false,
     onAllowExactTiming: () -> Unit = {},
     onDismissExactTiming: () -> Unit = {},
@@ -361,6 +387,9 @@ fun HomeScreen(
                 uiState = uiState,
                 showNotificationsOffBanner = showNotificationsOffBanner,
                 showExactTimingBanner = showExactTimingBanner,
+                showFullScreenBanner = showFullScreenBanner,
+                onAllowFullScreen = onAllowFullScreen,
+                onSilenceRing = onSilenceRing,
                 notificationsBlocked = notificationsBlocked,
                 onAllowExactTiming = onAllowExactTiming,
                 onDismissExactTiming = onDismissExactTiming,
@@ -383,6 +412,9 @@ private fun HomeContent(
     uiState: HomeUiState,
     showNotificationsOffBanner: Boolean,
     showExactTimingBanner: Boolean,
+    showFullScreenBanner: Boolean,
+    onAllowFullScreen: () -> Unit,
+    onSilenceRing: () -> Unit,
     notificationsBlocked: Boolean,
     onAllowExactTiming: () -> Unit,
     onDismissExactTiming: () -> Unit,
@@ -416,6 +448,7 @@ private fun HomeContent(
                 userName = uiState.userName,
                 status = uiState.sessionStatus,
                 hasPendingCheckIn = uiState.pendingCheckInAtMillis != null,
+                quietActive = uiState.quiet.isActive(System.currentTimeMillis()),
             )
             Spacer(Modifier.height(Dimens.sectionGap))
 
@@ -427,6 +460,17 @@ private fun HomeContent(
             ) {
                 NotificationsOffBanner(
                     onOpenSettings = onOpenNotificationSettings,
+                    modifier = Modifier.padding(bottom = Dimens.cardGap),
+                )
+            }
+            // US-11 §5: priority 2, after notifications-off and before exact timing.
+            AnimatedVisibility(
+                visible = showFullScreenBanner,
+                enter = expandVertically(tween(BANNER_ANIM_MILLIS)) + fadeIn(tween(BANNER_ANIM_MILLIS)),
+                exit = shrinkVertically(tween(BANNER_ANIM_MILLIS)) + fadeOut(tween(BANNER_ANIM_MILLIS)),
+            ) {
+                FullScreenDeniedBanner(
+                    onAllow = onAllowFullScreen,
                     modifier = Modifier.padding(bottom = Dimens.cardGap),
                 )
             }
@@ -443,7 +487,8 @@ private fun HomeContent(
             }
             // At most two banners (US-01 §2.1.3): the disclaimer waits behind the other two.
             AnimatedVisibility(
-                visible = uiState.disclaimerVisible && !(showNotificationsOffBanner && showExactTimingBanner),
+                visible = uiState.disclaimerVisible &&
+                    listOf(showNotificationsOffBanner, showFullScreenBanner, showExactTimingBanner).count { it } < 2,
                 exit = shrinkVertically(tween(BANNER_ANIM_MILLIS)) + fadeOut(tween(BANNER_ANIM_MILLIS)),
             ) {
                 DisclaimerBanner(
@@ -457,6 +502,9 @@ private fun HomeContent(
                 pendingCheckInAtMillis = uiState.pendingCheckInAtMillis,
                 showMissedHint = uiState.consecutiveMisses >= 1,
                 onAnswer = onAnswer,
+                ringing = uiState.ringing,
+                ringSilenced = uiState.ringSilenced,
+                onSilence = onSilenceRing,
             )
 
             // Slot C: level card (US-04).
@@ -478,6 +526,8 @@ private fun HomeContent(
                 nextAlarmAtMillis = uiState.nextAlarmAtMillis,
                 pausedUntilMillis = uiState.pausedUntilMillis,
                 autoPaused = uiState.autoPaused,
+                quiet = uiState.quiet,
+                ringing = uiState.ringing || uiState.ringSilenced,
                 notificationsBlocked = notificationsBlocked,
                 intervalLabel = LocalResources.current.formatInterval(uiState.interval),
                 onStartClick = onStartClick,
@@ -499,7 +549,7 @@ private fun HomeContent(
 }
 
 @Composable
-private fun Greeting(userName: String?, status: SessionStatus, hasPendingCheckIn: Boolean) {
+private fun Greeting(userName: String?, status: SessionStatus, hasPendingCheckIn: Boolean, quietActive: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Text(
             text = if (userName.isNullOrBlank()) {
@@ -517,6 +567,7 @@ private fun Greeting(userName: String?, status: SessionStatus, hasPendingCheckIn
             text = stringResource(
                 when {
                     hasPendingCheckIn -> R.string.home_subtitle_pending
+                    status == SessionStatus.RUNNING && quietActive -> R.string.home_subtitle_quiet
                     status == SessionStatus.RUNNING -> R.string.home_subtitle_running
                     status == SessionStatus.PAUSED -> R.string.home_subtitle_paused
                     else -> R.string.home_subtitle_stopped
@@ -598,6 +649,9 @@ private fun PendingCheckInSlot(
     pendingCheckInAtMillis: Long?,
     showMissedHint: Boolean,
     onAnswer: (Answer, Long) -> Unit,
+    ringing: Boolean = false,
+    ringSilenced: Boolean = false,
+    onSilence: () -> Unit = {},
 ) {
     var confirmation by remember { mutableStateOf<AnswerConfirmation?>(null) }
     LaunchedEffect(confirmation) {
@@ -621,6 +675,9 @@ private fun PendingCheckInSlot(
             checkInAtMillis = cardAt ?: displayedAt,
             answered = confirmation?.answer,
             showMissedHint = showMissedHint,
+            ringing = ringing,
+            ringSilenced = ringSilenced,
+            onSilence = onSilence,
             onAnswer = { answer ->
                 if (cardAt != null && confirmation == null) {
                     confirmation = AnswerConfirmation(answer, cardAt)
@@ -639,6 +696,9 @@ private fun PendingCheckInCard(
     onAnswer: (Answer) -> Unit,
     modifier: Modifier = Modifier,
     showMissedHint: Boolean = false,
+    ringing: Boolean = false,
+    ringSilenced: Boolean = false,
+    onSilence: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val time = remember(checkInAtMillis) {
@@ -679,14 +739,18 @@ private fun PendingCheckInCard(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_stat_checkin),
+                                painter = painterResource(if (ringing) R.drawable.ic_alarm else R.drawable.ic_stat_checkin),
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(if (ringing) 16.dp else 18.dp),
                             )
                             Spacer(Modifier.size(Spacing.sm))
                             Text(
-                                text = stringResource(R.string.pending_overline, time).uppercase(),
+                                text = stringResource(
+                                    if (ringing) R.string.pending_overline_ringing else R.string.pending_overline,
+                                    time,
+                                ).uppercase(),
                                 style = MaterialTheme.typography.labelMedium,
+                                modifier = if (ringing) Modifier.testTag(HomeTestTags.PENDING_RINGING_OVERLINE) else Modifier,
                             )
                         }
                         Text(
@@ -698,6 +762,13 @@ private fun PendingCheckInCard(
                             style = MaterialTheme.typography.bodyMedium,
                             color = onContainer.copy(alpha = 0.8f),
                         )
+                        if (ringSilenced) {
+                            Text(
+                                text = stringResource(R.string.pending_silenced_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = onContainer.copy(alpha = 0.7f),
+                            )
+                        }
                         if (showMissedHint) {
                             // US-07 §3: reassuring, never guilt-inducing.
                             Text(
@@ -706,6 +777,23 @@ private fun PendingCheckInCard(
                                 color = onContainer.copy(alpha = 0.7f),
                                 modifier = Modifier.testTag(HomeTestTags.PENDING_MISSED_HINT),
                             )
+                        }
+                    }
+                    if (ringing) {
+                        // US-11 §5: Silence, right-aligned under the captions.
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(
+                                onClick = onSilence,
+                                modifier = Modifier.testTag(HomeTestTags.PENDING_SILENCE),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_volume_off),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.size(Spacing.sm))
+                                Text(stringResource(R.string.alarm_silence))
+                            }
                         }
                     }
                     Spacer(Modifier.height(Spacing.lg))
@@ -771,7 +859,6 @@ private fun TodaySummary(good: Int, bad: Int, missed: Int, onClick: () -> Unit) 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag(HomeTestTags.TODAY_ROW)
             .clearAndSetSemantics {

@@ -165,13 +165,14 @@ fun StatsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
-                item(key = "frames") {
-                    FrameSelector(frame = frame, onFrame = { frame = it })
-                }
                 when {
                     events == null -> Unit
+                    // No history at all: just the empty state, no frame selector (US-08 sign-off).
                     events.isEmpty() -> item(key = "empty") { EmptyState(onGoHome = onGoHome) }
                     else -> {
+                        item(key = "frames") {
+                            FrameSelector(frame = frame, onFrame = { frame = it })
+                        }
                         val stats = StatsCalculator.compute(events, frame, nowMillis, timeZone)
                         val streak = StatsCalculator.streak(events, nowMillis, timeZone)
                         item(key = "tiles") { SummaryTiles(stats) }
@@ -319,8 +320,12 @@ private fun chartLabels(
     todayLabel: String,
 ): ChartLabels {
     val locale = Locale.getDefault()
-    val timeFormat = DateFormat.getTimeFormat(context).apply { this.timeZone = timeZone }
     val is24h = DateFormat.is24HourFormat(context)
+    val hourFormat = SimpleDateFormat(
+        DateFormat.getBestDateTimePattern(locale, if (is24h) "Hm" else "ha"),
+        locale,
+    ).apply { this.timeZone = timeZone }
+    fun hourLabel(millis: Long): String = hourFormat.format(Date(millis))
     fun fmt(pattern: String, millis: Long) =
         SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, pattern), locale)
             .apply { this.timeZone = timeZone }
@@ -339,7 +344,8 @@ private fun chartLabels(
                 }
             },
             boldAxisIndex = null,
-            bucket = buckets.map { "${timeFormat.format(Date(it.startMillis))}–${timeFormat.format(Date(it.endMillis))}" },
+            // Compact one-line range: "11 AM–12 PM" / "11:00–12:00" (US-08 sign-off).
+            bucket = buckets.map { "${hourLabel(it.startMillis)}–${hourLabel(it.endMillis)}" },
         )
         StatsFrame.WEEK -> ChartLabels(
             axis = buckets.mapIndexed { i, b -> if (i == buckets.lastIndex) todayLabel else fmt("EEE", b.startMillis) },
@@ -369,7 +375,10 @@ private fun chartSummary(stats: FrameStats, labels: ChartLabels, resources: Reso
             StatsFrame.MONTH -> R.string.chart_frame_30d_a11y
         },
     )
-    val highest = stats.buckets.withIndex().maxByOrNull { it.value.answered }?.takeIf { it.value.answered > 0 }
+    // "Busiest": most answers; ties go to the most recent bucket.
+    val highest = stats.buckets.withIndex().lastOrNull { indexed ->
+        indexed.value.answered > 0 && indexed.value.answered == stats.buckets.maxOf { it.answered }
+    }
     val base = resources.getString(R.string.chart_summary_a11y, title, frame, stats.good, stats.bad)
     return if (highest == null) {
         base
